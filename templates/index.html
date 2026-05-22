@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Team Delivery Dashboard</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#c9d1d9;min-height:100vh}
+.header{background:#161b22;border-bottom:1px solid #30363d;padding:16px 24px}
+.header h1{font-size:20px;color:#58a6ff;margin-bottom:12px}
+.chat-box{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chat-box input{flex:1;padding:10px 16px;background:#0d1117;border:1px solid #30363d;border-radius:20px;color:#c9d1d9;font-size:14px}
+.chat-box input:focus{outline:none;border-color:#58a6ff;box-shadow:0 0 0 2px rgba(88,166,255,.2)}
+.chat-box button{padding:10px 24px;background:#238636;border:none;border-radius:20px;color:#fff;cursor:pointer;font-size:14px;font-weight:600}
+.chat-box button:hover{background:#2ea043}
+.chat-box button:disabled{opacity:.5;cursor:not-allowed}
+.parsed{font-size:12px;color:#8b949e;padding:4px 24px;background:#161b22;border-bottom:1px solid #21262d}
+.parsed span{color:#58a6ff;font-weight:600}
+#compareBar{gap:8px;align-items:center;padding:8px 24px}
+.container{max-width:1400px;margin:0 auto;padding:24px}
+.loading{text-align:center;padding:60px;color:#8b949e;font-size:16px}
+.error{background:#3d1f28;border:1px solid #f85149;border-radius:6px;padding:12px 16px;margin:16px 0;color:#f85149}
+.summary-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px;text-align:center}
+.card .value{font-size:32px;font-weight:700;color:#58a6ff}
+.card .label{font-size:13px;color:#c9d1d9;margin-top:4px}
+.card.green .value{color:#3fb950}
+.card.green{background:rgba(63,185,80,0.1);border-color:#3fb950}
+.card.yellow .value{color:#d29922}
+.card.yellow{background:rgba(210,153,34,0.1);border-color:#d29922}
+.card.purple .value{color:#bc8cff}
+.card.purple{background:rgba(188,140,255,0.1);border-color:#bc8cff}
+.card.blue .value{color:#58a6ff}
+.card.blue{background:rgba(88,166,255,0.1);border-color:#58a6ff}
+.card.red .value{color:#f85149}
+.card.red{background:rgba(248,81,73,0.1);border-color:#f85149}
+.status-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}
+.status-chip{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#21262d;border:1px solid #30363d}
+.section{margin-bottom:32px}
+.section h2{font-size:16px;color:#c9d1d9;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid #21262d}
+.sprint-block{background:#161b22;border:1px solid #30363d;border-radius:8px;margin-bottom:16px;overflow:hidden}
+.sprint-header{padding:12px 16px;background:#21262d;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+.sprint-header:hover{background:#282e36}
+.sprint-header .name{font-weight:600;color:#58a6ff}
+.sprint-header .meta{font-size:12px;color:#8b949e}
+.sprint-header .sp{background:#238636;color:#fff;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.tbl-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:900px}
+th{text-align:left;padding:8px 12px;font-size:12px;color:#8b949e;border-bottom:1px solid #21262d;font-weight:600;white-space:nowrap}
+td{padding:8px 12px;font-size:13px;border-bottom:1px solid #161b22}
+tr:hover td{background:#1c2128}
+a{color:#58a6ff;text-decoration:none}
+a:hover{text-decoration:underline}
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600}
+.badge-done{background:#1b3a2d;color:#90ee90}
+.badge-progress{background:#2a2000;color:#ffd700}
+.badge-test{background:#3d2800;color:#ff8c00}
+.badge-todo{background:#1c2128;color:#8b949e}
+.badge-review{background:#271d3a;color:#bc8cff}
+.parent-link{font-size:12px;color:#8b949e}
+.parent-link a{color:#bc8cff}
+.sprint-tickets{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.sprint-tickets.open{max-height:5000px}
+.no-data{text-align:center;padding:60px;color:#484f58}
+.hints{margin-top:16px;font-size:13px;color:#484f58}
+.hints code{background:#21262d;padding:2px 6px;border-radius:4px;color:#8b949e}
+.team-dropdown{padding:10px 12px;background:#0d1117;border:1px solid #30363d;border-radius:20px;color:#c9d1d9;font-size:14px;cursor:pointer;min-width:160px}
+.team-dropdown:focus{outline:none;border-color:#58a6ff;box-shadow:0 0 0 2px rgba(88,166,255,.2)}
+.team-dropdown optgroup{background:#161b22;color:#8b949e;font-weight:600}
+.team-dropdown option{background:#0d1117;color:#c9d1d9;padding:4px}
+.compare-btn{padding:10px 14px;background:#30363d;border:none;border-radius:20px;color:#c9d1d9;cursor:pointer;font-size:14px}
+.compare-btn:hover{background:#484f58}
+.compare-btn:disabled{opacity:.3;cursor:not-allowed}
+.compare-btn.active{background:#58a6ff;color:#0d1117}
+.compare-go{padding:6px 16px;background:#238636;border:none;border-radius:20px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;margin-left:8px}
+.compare-go:hover{background:#2ea043}
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.compare-side{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}
+.compare-side h3{color:#58a6ff;margin-bottom:12px;font-size:15px}
+.compare-stat{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #21262d;font-size:13px}
+.compare-stat .val{font-weight:700}
+.compare-stat .better{color:#3fb950}
+.compare-stat .worse{color:#f85149}
+.project-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(350px,1fr));gap:16px;margin-top:16px}
+.member-card{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}
+.member-card h3{font-size:15px;margin-bottom:8px}
+.member-card h3 .role-tag{font-size:11px;padding:2px 8px;border-radius:10px;margin-left:8px}
+.role-dev{background:#1f3a1f;color:#3fb950}
+.role-qa{background:#271d3a;color:#bc8cff}
+.member-stats{display:flex;gap:12px;margin-bottom:8px;flex-wrap:wrap}
+.member-stats .mini-stat{text-align:center;padding:8px 12px;background:#0d1117;border-radius:6px;min-width:60px}
+.member-stats .mini-stat .mv{font-size:20px;font-weight:700;color:#58a6ff}
+.member-stats .mini-stat .ml{font-size:10px;color:#8b949e}
+.tab-bar{display:flex;gap:0;margin-bottom:20px;border-bottom:2px solid #21262d}
+.tab-btn{padding:10px 24px;background:none;border:none;color:#8b949e;font-size:14px;font-weight:600;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px}
+.tab-btn:hover{color:#c9d1d9}
+.tab-btn.active{color:#58a6ff;border-bottom-color:#58a6ff}
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+.chart-box{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:20px}
+.chart-box h3{font-size:14px;color:#c9d1d9;margin-bottom:12px;text-align:center}
+.show-charts-btn{padding:12px 28px;background:#238636;border:none;border-radius:20px;color:#fff;cursor:pointer;font-size:14px;font-weight:600}
+.show-charts-btn:hover{background:#2ea043}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📊 Team Delivery Dashboard</h1>
+  <div class="chat-box">
+    <select id="projectSelect" class="team-dropdown" onchange="onProjectSelect()">
+      <option value="">🏢 Project View</option>
+      {% for pname in project_teams %}<option value="{{ pname }}">{{ pname }}</option>{% endfor %}
+    </select>
+    <select id="teamSelect" class="team-dropdown" onchange="onTeamSelect()">
+      <option value="">👤 Pick a member</option>
+      {% for role, members in team_members.items() %}
+      <optgroup label="{{ role }}">
+        {% for name in members %}<option value="{{ name }}">{{ name }}</option>{% endfor %}
+      </optgroup>
+      {% endfor %}
+    </select>
+    <select id="sprintSelect" class="team-dropdown" disabled>
+      <option value="_none" selected disabled>🏃 Select Sprint</option>
+      <option value="">🏃 All Sprints</option>
+    </select>
+    <select id="quarterSelect" class="team-dropdown" onchange="onQuarterSelect()">
+      <option value="_none" selected disabled>📅 Select Quarter</option>
+      <option value="">📅 All Year</option>
+      <option value="Q1">Q1 (Jan-Mar)</option>
+      <option value="Q2">Q2 (Apr-Jun)</option>
+      <option value="Q3">Q3 (Jul-Sep)</option>
+      <option value="Q4">Q4 (Oct-Dec)</option>
+    </select>
+    <select id="monthSelect" class="team-dropdown" onchange="onMonthSelect()">
+      <option value="_none" selected disabled>🗓 Select Month</option>
+      <option value="">🗓 All Months</option>
+      <option value="1">January</option><option value="2">February</option>
+      <option value="3">March</option><option value="4">April</option>
+      <option value="5">May</option><option value="6">June</option>
+      <option value="7">July</option><option value="8">August</option>
+      <option value="9">September</option><option value="10">October</option>
+      <option value="11">November</option><option value="12">December</option>
+    </select>
+    <button id="compareBtn" class="compare-btn" onclick="toggleCompare()" disabled>⚖️</button>
+    <button class="compare-btn" onclick="loadAutomation()">🤖 Automation</button>
+    <button class="compare-btn" onclick="showDefectsTracker()">🐛 Defects Tracker</button>
+  </div>
+</div>
+<div id="compareBar" class="parsed" style="display:none">
+  <span>Compare:</span>
+  <select id="compareSprint1" class="team-dropdown" style="min-width:120px"></select>
+  <span>vs</span>
+  <select id="compareSprint2" class="team-dropdown" style="min-width:120px"></select>
+  <button class="compare-go" onclick="fetchCompare()">Compare</button>
+</div>
+<div id="parsedBar" class="parsed" style="display:none"></div>
+<div class="container" id="content">
+  <div class="no-data">
+    <p style="font-size:18px;margin-bottom:8px">💬 Ask me anything about a team member's Jira work</p>
+    <div class="hints">
+      <p>Try queries like:</p>
+      <p><code>show tasks of John for sprint 42</code></p>
+      <p><code>get details of nithiyanantham</code></p>
+      <p><code>what is assigned to Sarah for sprint Purple 290</code></p>
+    </div>
+  </div>
+</div>
+<script>
+const JIRA = "{{ jira_url }}";
+
+const PROJECT_TEAMS = {{ project_teams | tojson }};
+let currentProject = null;
+
+function onProjectSelect() {
+  const project = document.getElementById("projectSelect").value;
+  if (!project) return;
+  currentProject = project;
+  document.getElementById("teamSelect").value = "";
+  document.getElementById("compareBtn").disabled = true;
+  document.getElementById("compareBar").style.display = "none";
+
+  // Load sprints from all project members
+  const sprintSel = document.getElementById("sprintSelect");
+  sprintSel.innerHTML = '<option value="_none" selected disabled>🏃 Select Sprint</option><option value="">🏃 All Sprints</option>';
+  sprintSel.disabled = true;
+  fetch(`/api/sprints?project=${encodeURIComponent(project)}`).then(r=>r.json()).then(data=>{
+    let activeVal = "";
+    (data.sprints||[]).forEach(s=>{
+      const o = document.createElement("option");
+      o.value = s.name;
+      o.textContent = s.name + (s.state==="active"?" ●":"");
+      sprintSel.appendChild(o);
+      if (s.state === "active" && !activeVal) activeVal = s.name;
+    });
+    sprintSel.disabled = false;
+    if (activeVal) sprintSel.value = "";
+    fetchProject(project, null);
+  });
+}
+
+function onSprintChangeForProject() {
+  if (currentProject) {
+    const sprint = document.getElementById("sprintSelect").value || null;
+    fetchProject(currentProject, sprint);
+  }
+}
+
+async function fetchProject(project, sprint) {
+  const content = document.getElementById("content");
+  const bar = document.getElementById("parsedBar");
+  let url = `/api/project?project=${encodeURIComponent(project)}`;
+  if (sprint) url += `&sprint=${encodeURIComponent(sprint)}`;
+  content.innerHTML = '<div class="loading">⏳ Loading project team data...</div>';
+  try {
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.error) { content.innerHTML = `<div class="error">${data.error}</div>`; return; }
+
+    bar.innerHTML = `Project: <span>${data.project}</span>` + (data.sprint ? ` · Sprint: <span>${data.sprint}</span>` : ' · <span>Active Sprints</span>');
+    bar.style.display = "block";
+
+    let html = '<div class="summary-cards">';
+    html += `<div class="card blue"><div class="value">${data.totalTickets}</div><div class="label">Total Tickets</div></div>`;
+    if (data.isDistchAutomation) {
+      html += `<div class="card green"><div class="value">${data.totalNewTestCases||0}</div><div class="label">New Test Cases</div></div>`;
+      html += `<div class="card yellow"><div class="value">${data.totalRegressionFixes||0}</div><div class="label">Regression Fixes</div></div>`;
+    } else {
+      html += `<div class="card green"><div class="value">${data.totalDevSP||0}</div><div class="label">Total Dev SP</div></div>`;
+      if (!data.devOnly) {
+        html += `<div class="card purple"><div class="value">${data.totalQASP||0}</div><div class="label">Total QA SP</div></div>`;
+        html += `<div class="card red"><div class="value">${data.totalBugsIdentified||0}</div><div class="label">Bugs Identified</div></div>`;
+      }
+      html += `<div class="card yellow"><div class="value">${data.totalBugsFixed||0}</div><div class="label">Bugs Fixed</div></div>`;
+    }
+    html += '</div>';
+
+    html += '<div class="project-grid">';
+    data.members.forEach(m => {
+      const roleClass = m.role === 'Dev' ? 'role-dev' : 'role-qa';
+      const spLabel = m.role === 'Dev' ? 'Dev SP' : 'QA SP';
+      html += `<div class="member-card">
+        <h3>${m.name} <span class="role-tag ${roleClass}">${m.role}</span></h3>
+        <div class="member-stats">
+          <div class="mini-stat"><div class="mv">${m.totalTickets}</div><div class="ml">Tickets</div></div>`;
+      if (m.isDistchAutomation) {
+        html += `<div class="mini-stat"><div class="mv" style="color:#3fb950">${m.totalNewTestCases||0}</div><div class="ml">New TCs</div></div>
+          <div class="mini-stat"><div class="mv" style="color:#d29922">${m.totalRegressionFixes||0}</div><div class="ml">Reg Fixes</div></div>`;
+      } else {
+        html += `<div class="mini-stat"><div class="mv" style="color:${m.role==='Dev'?'#3fb950':'#bc8cff'}">${m.totalRoleSP||0}</div><div class="ml">${spLabel}</div></div>
+          <div class="mini-stat"><div class="mv" style="color:#f85149">${m.totalBugs||0}</div><div class="ml">${m.role==='Dev'?'Bugs Fixed':'Bugs Identified'}</div></div>`;
+      }
+      html += `</div>
+        <div class="status-bar" style="margin-bottom:8px">`;
+      Object.entries(m.byStatus||{}).forEach(([s,c]) => {
+        html += `<span class="status-chip"><span class="badge ${statusBadge(s)}">${s}</span> ${c}</span>`;
+      });
+      html += `</div>${ticketTable(m.tickets, spLabel, m.role, m.isDistchAutomation)}</div>`;
+    });
+    html += '</div>';
+
+    // Charts section (hidden) + button
+    html += '<div id="projectChartsSection" style="display:none;margin-top:24px">';
+    html += '<div class="charts-grid">';
+    html += `<div class="chart-box"><h3>${data.devOnly ? 'Total Tickets' : 'Total Tickets (Dev vs QA)'}</h3><canvas id="chartTickets"></canvas></div>`;
+    html += `<div class="chart-box"><h3>${data.devOnly ? 'Total Story Points' : 'Total Story Points (Dev vs QA)'}</h3><canvas id="chartSP"></canvas></div>`;
+    html += `<div class="chart-box"><h3>${data.devOnly ? 'Bugs Fixed' : 'Bugs Identified vs Bugs Fixed'}</h3><canvas id="chartBugs"></canvas></div>`;
+    html += '<div class="chart-box"><h3>Status Distribution</h3><canvas id="chartStatus"></canvas></div>';
+    html += '</div></div>';
+    html += '<div style="text-align:right;margin-top:20px"><button class="show-charts-btn" onclick="toggleProjectCharts()">📊 Show Charts</button></div>';
+
+    content.innerHTML = html;
+    window._projectData = data;
+  } catch(e) {
+    content.innerHTML = `<div class="error">Failed: ${e.message}</div>`;
+  }
+}
+
+function onTeamSelect() {
+  document.getElementById("projectSelect").value = "";
+  currentProject = null;
+  const name = document.getElementById("teamSelect").value;
+  const sprintSel = document.getElementById("sprintSelect");
+  sprintSel.innerHTML = '<option value="_none" selected disabled>🏃 Select Sprint</option><option value="">🏃 All Sprints</option>';
+  sprintSel.disabled = true;
+  if (name) {
+    document.getElementById("content").innerHTML = '<div class="no-data"><p style="font-size:18px">👆 Select a sprint, quarter, or month to view data</p></div>';
+    document.getElementById("parsedBar").style.display = "none";
+    fetch(`/api/sprints?name=${encodeURIComponent(name)}`).then(r=>r.json()).then(data=>{
+      (data.sprints||[]).forEach(s=>{
+        const o = document.createElement("option");
+        o.value = s.name;
+        o.textContent = s.name + (s.state==="active"?" ●":"");
+        sprintSel.appendChild(o);
+      });
+      sprintSel.disabled = false;
+      document.getElementById("compareBtn").disabled = false;
+    });
+  }
+}
+
+function onSprintSelect() {
+  const name = document.getElementById("teamSelect").value;
+  const sprint = document.getElementById("sprintSelect").value;
+  if (currentProject) {
+    onSprintChangeForProject();
+  } else if (name) {
+    fetchMember(name);
+  }
+}
+document.getElementById("sprintSelect").addEventListener("change", onSprintSelect);
+
+function onQuarterSelect() {
+  const name = document.getElementById("teamSelect").value;
+  document.getElementById("sprintSelect").value = "_none";
+  document.getElementById("monthSelect").value = "_none";
+  if (name) fetchMember(name);
+}
+
+function onMonthSelect() {
+  const name = document.getElementById("teamSelect").value;
+  document.getElementById("sprintSelect").value = "_none";
+  document.getElementById("quarterSelect").value = "_none";
+  if (name) fetchMember(name);
+}
+
+let compareMode = false;
+function toggleCompare() {
+  compareMode = !compareMode;
+  const bar = document.getElementById("compareBar");
+  const btn = document.getElementById("compareBtn");
+  bar.style.display = compareMode ? "flex" : "none";
+  btn.classList.toggle("active", compareMode);
+  if (compareMode) {
+    // Populate compare dropdowns from sprint dropdown options
+    const opts = document.getElementById("sprintSelect").options;
+    ["compareSprint1","compareSprint2"].forEach(id => {
+      const sel = document.getElementById(id);
+      sel.innerHTML = '<option value="">Select sprint</option>';
+      for (let i = 1; i < opts.length; i++) {
+        const o = document.createElement("option");
+        o.value = opts[i].value; o.textContent = opts[i].textContent;
+        sel.appendChild(o);
+      }
+    });
+  }
+}
+
+async function fetchCompare() {
+  const name = document.getElementById("teamSelect").value;
+  const s1 = document.getElementById("compareSprint1").value;
+  const s2 = document.getElementById("compareSprint2").value;
+  if (!name || !s1 || !s2) return alert("Select a member and two sprints");
+  if (s1 === s2) return alert("Pick two different sprints");
+  const content = document.getElementById("content");
+  content.innerHTML = '<div class="loading">⏳ Comparing sprints...</div>';
+  try {
+    const resp = await fetch(`/api/compare?name=${encodeURIComponent(name)}&sprint1=${encodeURIComponent(s1)}&sprint2=${encodeURIComponent(s2)}`);
+    const data = await resp.json();
+    if (data.error) { content.innerHTML = `<div class="error">${data.error}</div>`; return; }
+    const spLabel = data.role === "Dev" ? "Dev SP" : data.role === "QA" ? "QA SP" : "SP";
+    const bar = document.getElementById("parsedBar");
+    bar.innerHTML = `Comparing sprints for <span>${data.assignee}</span> (${data.role||'Unknown'})`;
+    bar.style.display = "block";
+
+    function cmpClass(a, b, higherBetter) {
+      if (a === b) return '';
+      if (higherBetter) return a > b ? 'better' : 'worse';
+      return a < b ? 'better' : 'worse';
+    }
+
+    function summaryCard(label, val, otherVal, higherBetter, color) {
+      const cls = cmpClass(val, otherVal, higherBetter);
+      return `<div class="card"><div class="value" style="color:${cls==='better'?'#3fb950':cls==='worse'?'#f85149':color||'#58a6ff'}">${val}</div><div class="label">${label}</div></div>`;
+    }
+
+    function statusChips(byStatus, otherStatus) {
+      let h = '<div class="status-bar" style="margin-top:8px">';
+      Object.keys({...byStatus,...otherStatus}).forEach(st => {
+        const v = byStatus[st]||0, ov = otherStatus[st]||0;
+        const cls = cmpClass(v, ov, st.toLowerCase().includes('done'));
+        h += `<span class="status-chip"><span class="badge ${statusBadge(st)}">${st}</span> <span class="${cls}" style="font-weight:700">${v}</span></span>`;
+      });
+      return h + '</div>';
+    }
+
+    function side(s, other) {
+      let h = `<h2 style="text-align:center;color:#58a6ff;font-size:20px;margin-bottom:16px">${s.sprint}</h2>`;
+      h += '<div class="summary-cards">';
+      h += summaryCard('Tickets', s.totalTickets, other.totalTickets, true, '#58a6ff');
+      h += summaryCard(spLabel, s.totalRoleSP||0, other.totalRoleSP||0, true, '#bc8cff');
+      const bugLabel = data.role === 'Dev' ? 'Bugs Fixed' : data.role === 'QA' ? 'Bugs Identified' : 'Bugs';
+      h += summaryCard(bugLabel, s.totalBugs||0, other.totalBugs||0, false, '#f85149');
+      h += '</div>';
+      h += statusChips(s.byStatus, other.byStatus);
+      h += '<div style="margin-top:16px">' + ticketTable(s.tickets, spLabel, data.role) + '</div>';
+      return h;
+    }
+
+    let html = '<div class="compare-grid">';
+    html += `<div class="compare-side">${side(data.sprint1, data.sprint2)}</div>`;
+    html += `<div class="compare-side">${side(data.sprint2, data.sprint1)}</div>`;
+    html += '</div>';
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = `<div class="error">Compare failed: ${e.message}</div>`;
+  }
+}
+
+function statusBadge(s) {
+  const l = s.toLowerCase();
+  if (l.includes("done")||l.includes("closed")||l.includes("resolved")||l.includes("ready for release")) return "badge-done";
+  if (l.includes("in test")) return "badge-test";
+  if (l.includes("progress")||l.includes("active")) return "badge-progress";
+  if (l.includes("review")||l.includes("testing")) return "badge-review";
+  return "badge-todo";
+}
+
+function parentCell(p) {
+  if (!p) return '<span style="color:#484f58">—</span>';
+  return `<span class="parent-link"><a href="${JIRA}/browse/${p.key}" target="_blank">${p.key}</a> ${p.summary}</span>`;
+}
+
+function parentStatus(p) {
+  if (!p || !p.status) return '<span style="color:#484f58">—</span>';
+  return `<span class="badge ${statusBadge(p.status)}">${p.status}</span>`;
+}
+
+function parentSP(t) {
+  return t.roleSP != null ? t.roleSP : '-';
+}
+
+function bugsCell(bugs) {
+  if (!bugs || !bugs.length) return '<span style="color:#484f58">—</span>';
+  return bugs.map(b =>
+    `<a href="${JIRA}/browse/${b.key}" target="_blank" title="${b.summary}" style="color:#f85149">${b.key}</a> <span class="badge ${statusBadge(b.status)}">${b.status}</span>`
+  ).join('<br>');
+}
+
+function ticketRow(t, isDistch, role) {
+  if (isDistch) {
+    return `<tr>
+      <td><a href="${JIRA}/browse/${t.key}" target="_blank">${t.key}</a></td>
+      <td>${t.summary}</td>
+      <td>${t.type}</td>
+      <td><span class="badge ${statusBadge(t.status)}">${t.status}</span></td>
+      <td>${t.priority}</td>
+      <td style="text-align:center">${t.newTestCase || '-'}</td>
+      <td style="text-align:center">${t.regressionFixes || '-'}</td>
+      <td>${t.updated}</td>
+    </tr>`;
+  }
+  return `<tr>
+    <td><a href="${JIRA}/browse/${t.key}" target="_blank">${t.key}</a></td>
+    <td>${t.summary}</td>
+    <td>${parentCell(t.parent)}</td>
+    ${role!=='Dev'?`<td>${parentStatus(t.parent)}</td>`:''}
+    <td style="text-align:center">${parentSP(t)}</td>
+    <td>${t.type}</td>
+    <td><span class="badge ${statusBadge(t.status)}">${t.status}</span></td>
+    <td>${t.priority}</td>
+    <td>${bugsCell(t.bugs)}</td>
+    <td>${t.updated}</td>
+  </tr>`;
+}
+
+function ticketTable(tickets, spLabel, role, isDistch) {
+  if (!tickets.length) return '<p style="padding:12px;color:#484f58">No tickets</p>';
+  if (isDistch) {
+    return `<div class="tbl-wrap"><table>
+      <thead><tr><th>Key</th><th>Summary</th><th>Type</th><th>Status</th><th>Priority</th><th>New Test Cases</th><th>Regression Fixes</th><th>Updated</th></tr></thead>
+      <tbody>${tickets.map(t => ticketRow(t, true, role)).join("")}</tbody>
+    </table></div>`;
+  }
+  const parentLabel = role === 'Dev' ? 'Epic' : 'Parent';
+  const bugCol = role === 'Dev' ? 'Bugs Fixed' : role === 'QA' ? 'Bugs Identified' : 'Bugs';
+  const parentStatusHead = role !== 'Dev' ? `<th>${parentLabel} Status</th>` : '';
+  return `<div class="tbl-wrap"><table>
+    <thead><tr><th>Key</th><th>Summary</th><th>${parentLabel}</th>${parentStatusHead}<th>${spLabel||'SP'}</th><th>Type</th><th>Status</th><th>Priority</th><th>${bugCol}</th><th>Updated</th></tr></thead>
+    <tbody>${tickets.map(t => ticketRow(t, false, role)).join("")}</tbody>
+  </table></div>`;
+}
+
+function sprintBlock(name, data, id, spLabel, role, isDistch) {
+  return `<div class="sprint-block">
+    <div class="sprint-header" onclick="toggleSprint('${id}')">
+      <span class="name">▸ ${name}</span>
+      <span class="meta">${data.info.startDate||'?'} → ${data.info.endDate||'?'} · ${data.info.state||''}</span>
+      <span class="sp">${data.totalSP} SP · ${data.totalRoleSP||0} ${spLabel} · ${data.tickets.length} tickets</span>
+    </div>
+    <div class="sprint-tickets" id="${id}">${ticketTable(data.tickets, spLabel, role, isDistch)}</div>
+  </div>`;
+}
+
+function toggleSprint(id) {
+  const el = document.getElementById(id);
+  el.classList.toggle("open");
+  const header = el.previousElementSibling.querySelector(".name");
+  header.textContent = el.classList.contains("open")
+    ? header.textContent.replace("▸","▾")
+    : header.textContent.replace("▾","▸");
+}
+
+async function fetchMember(name) {
+  const sprint = document.getElementById("sprintSelect").value;
+  const quarter = document.getElementById("quarterSelect").value;
+  const month = document.getElementById("monthSelect").value;
+  const q = "fetch details of " + name;
+  const content = document.getElementById("content");
+  const bar = document.getElementById("parsedBar");
+  content.innerHTML = '<div class="loading">⏳ Loading...</div>';
+  bar.style.display = "none";
+
+  try {
+    let url = `/api/query?q=${encodeURIComponent(q)}&quarter=${quarter==='_none'?'':quarter}&month=${month==='_none'?'':month}`;
+    if (sprint && sprint !== '_none') url += `&sprint=${encodeURIComponent(sprint)}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.error) { content.innerHTML = `<div class="error">${data.error}</div>`; return; }
+
+    // Show parsed interpretation
+    const p = data.parsedQuery;
+    const spLabel = (data.role === "Dev" ? "Dev SP" : data.role === "QA" ? "QA SP" : "SP");
+    const months = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
+    // Compute sprint range — only sprints whose dates fall in selected period
+    const allSprints = [];
+    [data.currentSprints, data.previousSprints].forEach(group => {
+      Object.entries(group||{}).forEach(([name, d]) => {
+        allSprints.push({name, start: d.info.startDate, end: d.info.endDate});
+      });
+    });
+    let filteredSprints = allSprints;
+    const yr = new Date().getFullYear();
+    if (p.month) {
+      const m = +p.month;
+      const mStart = `${yr}-${String(m).padStart(2,'0')}-01`;
+      const mEnd = `${yr}-${String(m).padStart(2,'0')}-31`;
+      filteredSprints = allSprints.filter(s => s.end >= mStart && s.start <= mEnd);
+    } else if (p.quarter) {
+      const qDates = {Q1:['01','03'],Q2:['04','06'],Q3:['07','09'],Q4:['10','12']};
+      const qd = qDates[p.quarter];
+      if (qd) {
+        const qStart = `${yr}-${qd[0]}-01`, qEnd = `${yr}-${qd[1]}-31`;
+        filteredSprints = allSprints.filter(s => s.end >= qStart && s.start <= qEnd);
+      }
+    }
+    filteredSprints.sort((a,b) => a.name.localeCompare(b.name));
+    const sprintRange = filteredSprints.length > 1
+      ? ` · <span>${filteredSprints[0].name} → ${filteredSprints[filteredSprints.length-1].name}</span>`
+      : filteredSprints.length === 1 ? ` · <span>${filteredSprints[0].name}</span>` : '';
+
+    bar.innerHTML = `Showing results for <span>${data.assignee}</span> (${data.role||'Unknown'})`
+      + (p.sprint ? ` · Sprint: <span>${p.sprint}</span>` : p.month ? ` · <span>${months[+p.month]} ${new Date().getFullYear()}</span>` : p.quarter ? ` · <span>${p.quarter} ${new Date().getFullYear()}</span>` : ` · <span>All Sprints (${new Date().getFullYear()})</span>`)
+      + (!p.sprint && sprintRange ? sprintRange : '');
+    bar.style.display = "block";
+
+    let html = '<div class="summary-cards">';
+    html += `<div class="card blue"><div class="value">${data.totalTickets}</div><div class="label">Total Tickets</div></div>`;
+    if (data.isDistchAutomation) {
+      html += `<div class="card green"><div class="value">${data.totalNewTestCases||0}</div><div class="label">New Test Cases</div></div>`;
+      html += `<div class="card yellow"><div class="value">${data.totalRegressionFixes||0}</div><div class="label">Regression Fixes</div></div>`;
+    } else {
+      html += `<div class="card purple"><div class="value">${data.totalRoleSP||0}</div><div class="label">Total ${spLabel}</div></div>`;
+      const bugLabel = data.role === 'Dev' ? 'Bugs Fixed' : data.role === 'QA' ? 'Bugs Identified' : 'Bugs';
+      html += `<div class="card red"><div class="value">${data.totalBugs||0}</div><div class="label">${bugLabel}</div></div>`;
+    }
+    html += '</div>';
+
+    // Parent status breakdown
+    // Ticket Status: QA = parent statuses, Dev = assigned ticket statuses
+    if (data.role === 'QA' && data.parentStatusCounts && Object.keys(data.parentStatusCounts).length) {
+      html += '<div class="section"><h2>📌 Ticket Status</h2><div class="status-bar">';
+      for (const [s,c] of Object.entries(data.parentStatusCounts)) {
+        html += `<span class="status-chip"><span class="badge ${statusBadge(s)}">${s}</span> ${c}</span>`;
+      }
+      html += '</div></div>';
+    } else if (data.role === 'Dev') {
+      html += '<div class="section"><h2>📌 Ticket Status</h2><div class="status-bar">';
+      for (const [s,c] of Object.entries(data.byStatus)) {
+        html += `<span class="status-chip"><span class="badge ${statusBadge(s)}">${s}</span> ${c}</span>`;
+      }
+      html += '</div></div>';
+    }
+
+    const cKeys = Object.keys(data.currentSprints);
+    if (cKeys.length) {
+      html += '<div class="section"><h2>🏃 Current / Active Sprints</h2>';
+      cKeys.forEach((k,i) => { html += sprintBlock(k, data.currentSprints[k], 'cs'+i, spLabel, data.role, data.isDistchAutomation); });
+      html += '</div>';
+    }
+
+    const pKeys = Object.keys(data.previousSprints);
+    if (pKeys.length) {
+      html += '<div class="section"><h2>📁 Previous Sprints</h2>';
+      pKeys.forEach((k,i) => { html += sprintBlock(k, data.previousSprints[k], 'ps'+i, spLabel, data.role, data.isDistchAutomation); });
+      html += '</div>';
+    }
+
+    if (data.backlog && data.backlog.length) {
+      html += '<div class="section"><h2>📋 Backlog / No Sprint</h2>' + ticketTable(data.backlog, spLabel, data.role, data.isDistchAutomation) + '</div>';
+    }
+
+    html += '<div class="section"><h2>📄 All Assigned Tickets</h2>' + ticketTable(data.tickets, spLabel, data.role, data.isDistchAutomation) + '</div>';
+
+    // Yearly metrics section
+    const bugCol = data.role === 'Dev' ? 'Bugs Fixed' : 'Bugs Identified';
+    html += '<div id="yearlyMetricsSection" style="display:none;margin-top:24px">';
+    html += '<div class="section"><h2>📈 Yearly Sprint Metrics</h2>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Sprint</th><th>Status</th><th>Dates</th><th>Tickets</th><th>' + spLabel + '</th><th>' + bugCol + '</th></tr></thead><tbody>';
+    // Combine all sprints, sort by date
+    const allMetrics = [];
+    const globalSeenBugs = new Set();
+    [data.currentSprints, data.previousSprints].forEach(group => {
+      Object.entries(group||{}).forEach(([name, d]) => {
+        let bugs = 0;
+        d.tickets.forEach(t => (t.bugs||[]).forEach(b => { if (!globalSeenBugs.has(b.key) && !(b.status||'').toLowerCase().includes('rejected')) { globalSeenBugs.add(b.key); bugs++; } }));
+        allMetrics.push({name, state: d.info.state||'', start: d.info.startDate||'', end: d.info.endDate||'', tickets: d.tickets.length, sp: d.totalRoleSP||0, bugs});
+      });
+    });
+    allMetrics.sort((a,b) => a.start.localeCompare(b.start));
+    // Add backlog/no-sprint tickets
+    if (data.backlog && data.backlog.length) {
+      let bugs = 0;
+      data.backlog.forEach(t => (t.bugs||[]).forEach(b => { if (!globalSeenBugs.has(b.key) && !(b.status||'').toLowerCase().includes('rejected')) { globalSeenBugs.add(b.key); bugs++; } }));
+      const blSP = data.backlog.reduce((s,t) => s + (t.roleSP||0), 0);
+      allMetrics.push({name:'Backlog / No Sprint', state:'', start:'', end:'', tickets: data.backlog.length, sp: blSP, bugs});
+    }
+    let totalT=0, totalSP=0, totalB=0;
+    allMetrics.forEach(m => {
+      totalT += m.tickets; totalSP += m.sp; totalB += m.bugs;
+      const stateClass = m.state==='active'?'badge-progress':'badge-done';
+      html += `<tr><td><strong>${m.name}</strong></td><td><span class="badge ${stateClass}">${m.state}</span></td><td>${m.start} → ${m.end}</td><td style="text-align:center">${m.tickets}</td><td style="text-align:center">${m.sp}</td><td style="text-align:center">${m.bugs}</td></tr>`;
+    });
+    html += `<tr style="border-top:2px solid #58a6ff;font-weight:700"><td>Total</td><td></td><td></td><td style="text-align:center">${totalT}</td><td style="text-align:center">${totalSP}</td><td style="text-align:center">${totalB}</td></tr>`;
+    html += '</tbody></table></div></div></div>';
+    html += '<div style="text-align:right;margin-top:20px"><button class="show-charts-btn" onclick="toggleYearlyMetrics()">📈 Yearly Metrics</button></div>';
+
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = `<div class="error">Failed: ${e.message}</div>`;
+  }
+}
+
+let chartInstances = [];
+
+function toggleYearlyMetrics() {
+  const section = document.getElementById('yearlyMetricsSection');
+  const btns = document.querySelectorAll('.show-charts-btn');
+  const btn = [...btns].find(b => b.textContent.includes('Yearly'));
+  if (section.style.display === 'none') {
+    section.style.display = '';
+    if (btn) btn.textContent = '📈 Hide Metrics';
+    section.scrollIntoView({behavior:'smooth'});
+  } else {
+    section.style.display = 'none';
+    if (btn) btn.textContent = '📈 Yearly Metrics';
+  }
+}
+
+function toggleProjectCharts() {
+  const section = document.getElementById('projectChartsSection');
+  const btn = document.querySelector('.show-charts-btn');
+  if (section.style.display === 'none') {
+    section.style.display = '';
+    btn.textContent = '📊 Hide Charts';
+    renderProjectCharts(window._projectData);
+    section.scrollIntoView({behavior:'smooth'});
+  } else {
+    section.style.display = 'none';
+    btn.textContent = '📊 Show Charts';
+    chartInstances.forEach(c=>c.destroy());
+    chartInstances = [];
+  }
+}
+
+function renderProjectCharts(data) {
+  chartInstances.forEach(c=>c.destroy());
+  chartInstances = [];
+  const members = data.members||[];
+  const dev = members.filter(m=>m.role==='Dev');
+  const qa = members.filter(m=>m.role==='QA');
+  const devOnly = data.devOnly;
+  const lineOpts = {plugins:{legend:{labels:{color:'#c9d1d9'}}},scales:{y:{beginAtZero:true,ticks:{color:'#8b949e'},grid:{color:'#21262d'}},x:{ticks:{color:'#8b949e'},grid:{color:'#21262d'}}},elements:{line:{tension:0.3},point:{radius:6}}};
+
+  const tLabels = devOnly ? ['Dev'] : ['Dev','QA'];
+  const tData = devOnly ? [dev.reduce((s,m)=>s+m.totalTickets,0)] : [dev.reduce((s,m)=>s+m.totalTickets,0),qa.reduce((s,m)=>s+m.totalTickets,0)];
+  chartInstances.push(new Chart(document.getElementById('chartTickets'),{
+    type:'line',
+    data:{labels:tLabels,datasets:[{label:'Total Tickets',data:tData,borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,0.1)',fill:true,pointBackgroundColor:devOnly?['#3fb950']:['#3fb950','#bc8cff']}]},
+    options:lineOpts
+  }));
+
+  const spData = devOnly ? [dev.reduce((s,m)=>s+(m.totalRoleSP||0),0)] : [dev.reduce((s,m)=>s+(m.totalRoleSP||0),0),qa.reduce((s,m)=>s+(m.totalRoleSP||0),0)];
+  chartInstances.push(new Chart(document.getElementById('chartSP'),{
+    type:'line',
+    data:{labels:tLabels,datasets:[{label:'Total Story Points',data:spData,borderColor:'#58a6ff',backgroundColor:'rgba(63,185,80,0.1)',fill:true,pointBackgroundColor:devOnly?['#3fb950']:['#3fb950','#bc8cff']}]},
+    options:lineOpts
+  }));
+
+  const bLabels = devOnly ? ['Bugs Fixed'] : ['Bugs Fixed','Bugs Identified'];
+  const bData = devOnly ? [dev.reduce((s,m)=>s+(m.totalBugs||0),0)] : [dev.reduce((s,m)=>s+(m.totalBugs||0),0),qa.reduce((s,m)=>s+(m.totalBugs||0),0)];
+  chartInstances.push(new Chart(document.getElementById('chartBugs'),{
+    type:'line',
+    data:{labels:bLabels,datasets:[{label:'Bugs',data:bData,borderColor:'#58a6ff',backgroundColor:'rgba(248,81,73,0.1)',fill:true,pointBackgroundColor:devOnly?['#d29922']:['#d29922','#f85149']}]},
+    options:lineOpts
+  }));
+
+  const statusMap = {};
+  members.forEach(m=>{Object.entries(m.byStatus||{}).forEach(([s,c])=>{statusMap[s]=(statusMap[s]||0)+c;});});
+  const statusColors = {'Done':'#90ee90','Closed':'#90ee90','Ready for Release':'#90ee90','Resolved':'#90ee90','In Progress':'#ffd700','In Test':'#ff8c00','Open':'#8b949e','In Review':'#bc8cff','Testing':'#bc8cff'};
+  chartInstances.push(new Chart(document.getElementById('chartStatus'),{
+    type:'doughnut',
+    data:{labels:Object.keys(statusMap),datasets:[{data:Object.values(statusMap),backgroundColor:Object.keys(statusMap).map(s=>statusColors[s]||'#58a6ff')}]},
+    options:{plugins:{legend:{labels:{color:'#c9d1d9'}}}}
+  }));
+}
+
+function statusBadgeClass(s) {
+  const l = s.toLowerCase();
+  if (l.includes('done') || l.includes('release') || l.includes('closed')) return 'badge-done';
+  if (l.includes('progress')) return 'badge-progress';
+  if (l.includes('review') || l.includes('test')) return 'badge-review';
+  return 'badge-todo';
+}
+
+async function loadAutomation() {
+  const content = document.getElementById("content");
+  const bar = document.getElementById("parsedBar");
+  bar.innerHTML = "🤖 <span>QA Automation Tickets</span>";
+  bar.style.display = "block";
+  content.innerHTML = '<div class="loading">⏳ Loading automation tickets...</div>';
+  try {
+    const resp = await fetch("/api/automation");
+    const data = await resp.json();
+    let html = '';
+    for (const [project, tickets] of Object.entries(data)) {
+      html += `<div class="section"><h2>${project} (${tickets.length})</h2>`;
+      if (!tickets.length) { html += '<p class="no-data">No tickets found</p></div>'; continue; }
+      html += '<div class="tbl-wrap"><table><tr><th>Ticket</th><th>Status</th><th>Assignee</th><th>Summary</th><th>New Test Cases</th><th>Regression Fixes</th></tr>';
+      for (const t of tickets) {
+        html += `<tr><td><a href="${JIRA}/browse/${t.key}" target="_blank">${t.key}</a></td>`
+          + `<td><span class="badge ${statusBadgeClass(t.status)}">${t.status}</span></td>`
+          + `<td>${t.assignee || ''}</td>`
+          + `<td>${t.summary}</td>`
+          + `<td style="text-align:center">${t.newTestCase || '-'}</td>`
+          + `<td style="text-align:center">${t.regressionFixes || '-'}</td></tr>`;
+      }
+      html += '</table></div></div>';
+    }
+    content.innerHTML = html;
+  } catch (e) {
+    content.innerHTML = `<div class="error">Failed to load automation data: ${e.message}</div>`;
+  }
+}
+
+const TEAM_MEMBERS_MAP = {{ team_members | tojson }};
+
+function showDefectsTracker() {
+  const bar = document.getElementById("parsedBar");
+  bar.innerHTML = "🐛 <span>Defects Tracker</span>";
+  bar.style.display = "block";
+  document.getElementById("projectSelect").value = "";
+  document.getElementById("teamSelect").value = "";
+  currentProject = null;
+
+  let html = '<div class="section"><h2>🐛 Defects Tracker</h2>';
+  html += '<div style="display:flex;gap:12px;margin-bottom:20px;align-items:center">';
+  html += '<select id="defectTeam" class="team-dropdown" onchange="onDefectTeamChange()"><option value="">Select Team</option><option value="QA">QA</option><option value="Dev">Dev</option><option value="DA">DA</option></select>';
+  html += '<select id="defectMember" class="team-dropdown" onchange="fetchDefects()" disabled><option value="">Select Member</option></select>';
+  html += '</div>';
+  html += '<div id="defectsResult"></div></div>';
+  document.getElementById("content").innerHTML = html;
+}
+
+function onDefectTeamChange() {
+  const team = document.getElementById("defectTeam").value;
+  const sel = document.getElementById("defectMember");
+  sel.innerHTML = '<option value="">Select Member</option>';
+  sel.disabled = !team;
+  document.getElementById("defectsResult").innerHTML = '';
+  if (!team) return;
+  (TEAM_MEMBERS_MAP[team]||[]).forEach(n => {
+    const o = document.createElement("option");
+    o.value = n; o.textContent = n;
+    sel.appendChild(o);
+  });
+}
+
+async function fetchDefects() {
+  const team = document.getElementById("defectTeam").value;
+  const member = document.getElementById("defectMember").value;
+  const result = document.getElementById("defectsResult");
+  if (!team || !member) return;
+  result.innerHTML = '<div class="loading">⏳ Loading defects...</div>';
+  try {
+    const resp = await fetch(`/api/defects?team=${encodeURIComponent(team)}&member=${encodeURIComponent(member)}`);
+    const data = await resp.json();
+    if (data.error) { result.innerHTML = `<div class="error">${data.error}</div>`; return; }
+    let html = '<div class="summary-cards">';
+    html += `<div class="card red"><div class="value">${data.total}</div><div class="label">Total ${data.column}</div></div>`;
+    html += '</div>';
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Sprint</th><th>State</th><th>Start</th><th>End</th><th style="text-align:center">' + data.column + '</th></tr></thead><tbody>';
+    data.sprints.forEach(s => {
+      const stCls = s.state==='active'?'badge-progress':'badge-done';
+      html += `<tr><td><strong>${s.name}</strong></td><td><span class="badge ${stCls}">${s.state}</span></td><td>${s.startDate}</td><td>${s.endDate}</td><td style="text-align:center;font-weight:700;color:#f85149">${s.count}</td></tr>`;
+    });
+    if (data.noSprint) {
+      html += `<tr><td><strong>No Sprint</strong></td><td></td><td></td><td></td><td style="text-align:center;font-weight:700;color:#8b949e">${data.noSprint}</td></tr>`;
+    }
+    html += `<tr style="border-top:2px solid #58a6ff;font-weight:700"><td>Total</td><td></td><td></td><td></td><td style="text-align:center;color:#58a6ff">${data.total}</td></tr>`;
+    html += '</tbody></table></div>';
+    result.innerHTML = html;
+  } catch(e) {
+    result.innerHTML = `<div class="error">Failed: ${e.message}</div>`;
+  }
+}
+</script>
+</body>
+</html>
