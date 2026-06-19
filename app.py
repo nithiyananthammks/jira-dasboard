@@ -864,48 +864,35 @@ def compare():
 
 @app.route("/api/project/compare")
 def project_compare():
+    """Fetch one quarter's data for a project. Frontend calls twice and combines."""
     project = request.args.get("project", "").strip()
-    q1 = request.args.get("q1", "").strip()
-    q2 = request.args.get("q2", "").strip()
+    quarter = request.args.get("quarter", "").strip()
     if not project or project not in PROJECT_TEAMS:
         return jsonify({"error": f"Unknown project. Available: {list(PROJECT_TEAMS.keys())}"}), 400
-    if not q1 or not q2:
-        return jsonify({"error": "q1 and q2 (quarters) are required"}), 400
+    if not quarter:
+        return jsonify({"error": "quarter is required (Q1/Q2/Q3/Q4)"}), 400
 
     team = PROJECT_TEAMS[project]
     project_keys = team.get("keys")
-    year = __import__("datetime").date.today().year
-    QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
-                     "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
-
-    # Run quarters sequentially to avoid threading issues with shared Session
-    def _quarter_data(quarter):
-        members = []
-        for role in ("Dev", "QA"):
-            for name in team.get(role, []):
-                try:
-                    data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
-                    if data:
-                        members.append(data)
-                except Exception:
-                    pass
-        return {
-            "quarter": quarter,
-            "totalTickets": sum(m["totalTickets"] for m in members),
-            "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
-            "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
-            "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),
-            "totalBugsIdentified": sum(m["totalBugs"] for m in members if m["role"] == "QA"),
-            "members": members,
-        }
-
-    try:
-        data1 = _quarter_data(q1)
-        data2 = _quarter_data(q2)
-    except Exception as e:
-        return jsonify({"error": f"Compare failed: {str(e)}"}), 500
-
-    return jsonify({"project": project, "q1": data1, "q2": data2})
+    members = []
+    for role in ("Dev", "QA"):
+        for name in team.get(role, []):
+            try:
+                data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
+                if data:
+                    members.append(data)
+            except Exception:
+                pass
+    return jsonify({
+        "project": project,
+        "quarter": quarter,
+        "totalTickets": sum(m["totalTickets"] for m in members),
+        "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
+        "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
+        "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),
+        "totalBugsIdentified": sum(m["totalBugs"] for m in members if m["role"] == "QA"),
+        "members": members,
+    })
 
 
 def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
