@@ -207,7 +207,8 @@ function onProjectSelect() {
     });
     sprintSel.disabled = false;
     if (activeVal) sprintSel.value = "";
-    fetchProject(project, null);
+    document.getElementById("content").innerHTML = '<div class="no-data"><p style="font-size:18px">👆 Select a sprint, quarter, or compare quarters</p></div>';
+    document.getElementById("parsedBar").style.display = "none";
   });
 }
 
