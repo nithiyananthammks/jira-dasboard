@@ -191,6 +191,7 @@ function onProjectSelect() {
   document.getElementById("compareBtn").disabled = true;
   document.getElementById("compareBar").style.display = "none";
   document.getElementById("projectCompareBar").style.display = "flex";
+  document.getElementById("projectCompareBar").querySelector(".compare-go").disabled = true;
 
   // Load sprints from all project members
   const sprintSel = document.getElementById("sprintSelect");
@@ -207,7 +208,6 @@ function onProjectSelect() {
     });
     sprintSel.disabled = false;
     if (activeVal) sprintSel.value = "";
-    document.getElementById("projectCompareBar").querySelector(".compare-go").disabled = true;
     fetchProject(project, null).then(() => {
       document.getElementById("projectCompareBar").querySelector(".compare-go").disabled = false;
     });
