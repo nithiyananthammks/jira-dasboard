@@ -207,8 +207,10 @@ function onProjectSelect() {
     });
     sprintSel.disabled = false;
     if (activeVal) sprintSel.value = "";
-    document.getElementById("content").innerHTML = '<div class="no-data"><p style="font-size:18px">👆 Select a sprint, quarter, or compare quarters</p></div>';
-    document.getElementById("parsedBar").style.display = "none";
+    document.getElementById("projectCompareBar").querySelector(".compare-go").disabled = true;
+    fetchProject(project, null).then(() => {
+      document.getElementById("projectCompareBar").querySelector(".compare-go").disabled = false;
+    });
   });
 }
 
