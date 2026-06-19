@@ -878,91 +878,34 @@ def project_compare():
     QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
                      "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
 
-    def _lite_summary(name, quarter):
-        """Fast summary — uses field SP with Dev formula, bulk bug count."""
-        try:
-            account_id, display_name = find_user(name)
-        except Exception:
-            return None
-        if not account_id:
-            return None
-        role = get_role(display_name)
-        jql = f'assignee = "{account_id}"'
-        if project_keys:
-            jql += f' AND project in ({",".join(project_keys)})'
-        if quarter in QUARTER_DATES:
-            start, end = QUARTER_DATES[quarter]
-            jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
-        jql += f' {USER_JQL_EXCLUDE.get(display_name.lower(), "")} ORDER BY updated DESC'
-        try:
-            issues = jira_search(jql)
-        except Exception:
-            issues = []
-        tickets = [extract_ticket(i) for i in issues]
-        # Apply Dev SP formula for devs
-        if role == "Dev":
-            dn = display_name.lower()
-            use_field = any(n in dn or dn in n for n in SP_FROM_FIELD_DEVS)
-            if use_field:
-                total_sp = sum(_dev_sp_from_field(t["storyPoints"]) or 0 for t in tickets)
-            else:
-                total_sp = sum(t["storyPoints"] or 0 for t in tickets)
-        else:
-            total_sp = sum(t["storyPoints"] or 0 for t in tickets)
-
-        # Quick bug count
-        bug_count = 0
-        ticket_keys = set(t["key"] for t in tickets)
-        parent_keys = set(t["parent"]["key"] for t in tickets if t["parent"])
-        try:
-            if role == "Dev" and ticket_keys:
-                keys_jql = ",".join(f'"{k}"' for k in ticket_keys)
-                bugs = jira_search(f'issuetype in (Bug, Bug-Subtask) AND parent in ({keys_jql})')
-                bug_count = len([b for b in bugs if "rejected" not in (b["fields"].get("status") or {}).get("name", "").lower()])
-            elif role == "QA" and parent_keys:
-                parents_jql = ",".join(f'"{k}"' for k in parent_keys)
-                bugs = jira_search(f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}" AND parent in ({parents_jql})')
-                bug_count = len([b for b in bugs if "rejected" not in (b["fields"].get("status") or {}).get("name", "").lower()])
-        except Exception:
-            pass
-
-        by_status = {}
-        for t in tickets:
-            by_status.setdefault(t["status"], []).append(t)
-        return {
-            "name": display_name,
-            "role": role,
-            "totalTickets": len(tickets),
-            "totalRoleSP": total_sp,
-            "totalBugs": bug_count,
-            "byStatus": {s: len(ts) for s, ts in by_status.items()},
-        }
-
-    def _quarter_data(quarter):
-        members = []
+    # Parallelize ALL member+quarter combos for accurate SP
+    all_tasks = []
+    for quarter in (q1, q2):
         for role in ("Dev", "QA"):
             for name in team.get(role, []):
-                data = _lite_summary(name, quarter)
-                if data:
-                    members.append(data)
+                all_tasks.append((name, quarter))
+
+    from concurrent.futures import ThreadPoolExecutor
+    def _do(args):
+        name, quarter = args
+        return (quarter, _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter))
+
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        results = list(pool.map(_do, all_tasks))
+
+    def _build(quarter):
+        members = [data for q, data in results if q == quarter and data]
         return {
             "quarter": quarter,
             "totalTickets": sum(m["totalTickets"] for m in members),
             "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
             "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
-            "totalBugsFixed": 0,
-            "totalBugsIdentified": 0,
+            "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),
+            "totalBugsIdentified": sum(m["totalBugs"] for m in members if m["role"] == "QA"),
             "members": members,
         }
 
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        f1 = pool.submit(_quarter_data, q1)
-        f2 = pool.submit(_quarter_data, q2)
-        data1 = f1.result()
-        data2 = f2.result()
-
-    return jsonify({"project": project, "q1": data1, "q2": data2})
+    return jsonify({"project": project, "q1": _build(q1), "q2": _build(q2)})
 
 
 def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
