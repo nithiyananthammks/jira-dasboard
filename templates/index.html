@@ -435,16 +435,37 @@ async function fetchProjectCompare() {
   if (!currentProject || !q1 || !q2) return alert("Select a project and two quarters");
   if (q1 === q2) return alert("Pick two different quarters");
   const content = document.getElementById("content");
-  content.innerHTML = '<div class="loading">⏳ Loading Q1 data...</div>';
+  const team = PROJECT_TEAMS[currentProject];
+  const allMembers = [...(team.Dev||[]), ...(team.QA||[])];
+
+  async function fetchQuarter(quarter) {
+    const members = [];
+    for (const name of allMembers) {
+      content.innerHTML = `<div class="loading">⏳ ${quarter}: Loading ${name}...</div>`;
+      try {
+        const r = await fetch(`/api/query?q=${encodeURIComponent(name)}&quarter=${quarter}`);
+        const d = await r.json();
+        if (!d.error) members.push(d);
+      } catch(e) {}
+    }
+    return members;
+  }
+
   try {
-    content.innerHTML = '<div class="loading">⏳ Fetching ' + q1 + ' data...</div>';
-    const r1 = await fetch(`/api/project?project=${encodeURIComponent(currentProject)}&quarter=${q1}&lite=1`);
-    const d1 = await r1.json();
-    if (d1.error) { content.innerHTML = `<div class="error">${d1.error}</div>`; return; }
-    content.innerHTML = '<div class="loading">⏳ Fetching ' + q2 + ' data...</div>';
-    const r2 = await fetch(`/api/project?project=${encodeURIComponent(currentProject)}&quarter=${q2}&lite=1`);
-    const d2 = await r2.json();
-    if (d2.error) { content.innerHTML = `<div class="error">${d2.error}</div>`; return; }
+    const m1 = await fetchQuarter(q1);
+    const m2 = await fetchQuarter(q2);
+
+    function totals(members) {
+      return {
+        totalTickets: members.reduce((s,m) => s + (m.totalTickets||0), 0),
+        totalDevSP: members.filter(m=>m.role==='Dev').reduce((s,m) => s + (m.totalRoleSP||0), 0),
+        totalQASP: members.filter(m=>m.role==='QA').reduce((s,m) => s + (m.totalRoleSP||0), 0),
+        totalBugsFixed: members.filter(m=>m.role==='Dev').reduce((s,m) => s + (m.totalBugs||0), 0),
+        totalBugsIdentified: members.filter(m=>m.role==='QA').reduce((s,m) => s + (m.totalBugs||0), 0),
+        members: members.map(m => ({name:m.assignee, role:m.role, totalRoleSP:m.totalRoleSP||0, totalTickets:m.totalTickets||0, totalBugs:m.totalBugs||0}))
+      };
+    }
+    const d1 = totals(m1), d2 = totals(m2);
     const bar = document.getElementById("parsedBar");
     const year = new Date().getFullYear();
     bar.innerHTML = `Project: <span>${currentProject}</span> · Comparing <span>${q1} ${year}</span> vs <span>${q2} ${year}</span>`;
@@ -455,23 +476,23 @@ async function fetchProjectCompare() {
     let html = '<div class="compare-grid"><div class="compare-side">';
     html += `<h3>${q1} ${year}</h3>`;
     html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d1.totalTickets, d2.totalTickets, true)}">${d1.totalTickets}</span></div>`;
-    html += `<div class="compare-stat"><span>Story Points (Dev)</span><span class="val ${cmp(d1.totalDevSP, d2.totalDevSP, true)}">${d1.totalDevSP}</span></div>`;
-    html += `<div class="compare-stat"><span>Story Points (QA)</span><span class="val ${cmp(d1.totalQASP, d2.totalQASP, true)}">${d1.totalQASP}</span></div>`;
+    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d1.totalDevSP, d2.totalDevSP, true)}">${d1.totalDevSP}</span></div>`;
+    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d1.totalQASP, d2.totalQASP, true)}">${d1.totalQASP}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d1.totalBugsIdentified}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d1.totalBugsFixed}</span></div>`;
     html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
-    (d1.members||[]).forEach(m => {
+    d1.members.forEach(m => {
       html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
     });
     html += '</div><div class="compare-side">';
     html += `<h3>${q2} ${year}</h3>`;
     html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d2.totalTickets, d1.totalTickets, true)}">${d2.totalTickets}</span></div>`;
-    html += `<div class="compare-stat"><span>Story Points (Dev)</span><span class="val ${cmp(d2.totalDevSP, d1.totalDevSP, true)}">${d2.totalDevSP}</span></div>`;
-    html += `<div class="compare-stat"><span>Story Points (QA)</span><span class="val ${cmp(d2.totalQASP, d1.totalQASP, true)}">${d2.totalQASP}</span></div>`;
+    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d2.totalDevSP, d1.totalDevSP, true)}">${d2.totalDevSP}</span></div>`;
+    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d2.totalQASP, d1.totalQASP, true)}">${d2.totalQASP}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d2.totalBugsIdentified}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d2.totalBugsFixed}</span></div>`;
     html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
-    (d2.members||[]).forEach(m => {
+    d2.members.forEach(m => {
       html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
     });
     html += '</div></div>';
