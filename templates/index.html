@@ -462,10 +462,13 @@ async function fetchProjectCompare() {
         totalQASP: members.filter(m=>m.role==='QA').reduce((s,m) => s + (m.totalRoleSP||0), 0),
         totalBugsFixed: members.filter(m=>m.role==='Dev').reduce((s,m) => s + (m.totalBugs||0), 0),
         totalBugsIdentified: members.filter(m=>m.role==='QA').reduce((s,m) => s + (m.totalBugs||0), 0),
-        members: members.map(m => ({name:m.assignee, role:m.role, totalRoleSP:m.totalRoleSP||0, totalTickets:m.totalTickets||0, totalBugs:m.totalBugs||0}))
+        totalNewTestCases: members.reduce((s,m) => s + (m.totalNewTestCases||0), 0),
+        totalRegressionFixes: members.reduce((s,m) => s + (m.totalRegressionFixes||0), 0),
+        members: members.map(m => ({name:m.assignee, role:m.role, totalRoleSP:m.totalRoleSP||0, totalTickets:m.totalTickets||0, totalBugs:m.totalBugs||0, totalNewTestCases:m.totalNewTestCases||0, totalRegressionFixes:m.totalRegressionFixes||0}))
       };
     }
     const d1 = totals(m1), d2 = totals(m2);
+    const isDistch = currentProject === "DISTCH Automation";
     const bar = document.getElementById("parsedBar");
     const year = new Date().getFullYear();
     bar.innerHTML = `Project: <span>${currentProject}</span> · Comparing <span>${q1} ${year}</span> vs <span>${q2} ${year}</span>`;
@@ -473,28 +476,33 @@ async function fetchProjectCompare() {
 
     function cmp(a, b, higher) { return a === b ? '' : (higher ? (a > b ? 'better' : 'worse') : (a < b ? 'better' : 'worse')); }
 
+    function sideHtml(d, other, qLabel) {
+      let html = `<h3>${qLabel} ${year}</h3>`;
+      html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d.totalTickets, other.totalTickets, true)}">${d.totalTickets}</span></div>`;
+      if (isDistch) {
+        html += `<div class="compare-stat"><span>New Test Cases</span><span class="val ${cmp(d.totalNewTestCases, other.totalNewTestCases, true)}">${d.totalNewTestCases}</span></div>`;
+        html += `<div class="compare-stat"><span>Regression Fixes</span><span class="val ${cmp(d.totalRegressionFixes, other.totalRegressionFixes, true)}">${d.totalRegressionFixes}</span></div>`;
+      } else {
+        html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d.totalDevSP, other.totalDevSP, true)}">${d.totalDevSP}</span></div>`;
+        html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d.totalQASP, other.totalQASP, true)}">${d.totalQASP}</span></div>`;
+        html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d.totalBugsIdentified}</span></div>`;
+        html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d.totalBugsFixed}</span></div>`;
+      }
+      html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
+      d.members.forEach(m => {
+        if (isDistch) {
+          html += `<div class="compare-stat"><span>${m.name}</span><span class="val">${m.totalTickets} tickets · ${m.totalNewTestCases} new · ${m.totalRegressionFixes} fixes</span></div>`;
+        } else {
+          html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
+        }
+      });
+      return html;
+    }
+
     let html = '<div class="compare-grid"><div class="compare-side">';
-    html += `<h3>${q1} ${year}</h3>`;
-    html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d1.totalTickets, d2.totalTickets, true)}">${d1.totalTickets}</span></div>`;
-    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d1.totalDevSP, d2.totalDevSP, true)}">${d1.totalDevSP}</span></div>`;
-    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d1.totalQASP, d2.totalQASP, true)}">${d1.totalQASP}</span></div>`;
-    html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d1.totalBugsIdentified}</span></div>`;
-    html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d1.totalBugsFixed}</span></div>`;
-    html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
-    d1.members.forEach(m => {
-      html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
-    });
+    html += sideHtml(d1, d2, q1);
     html += '</div><div class="compare-side">';
-    html += `<h3>${q2} ${year}</h3>`;
-    html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d2.totalTickets, d1.totalTickets, true)}">${d2.totalTickets}</span></div>`;
-    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d2.totalDevSP, d1.totalDevSP, true)}">${d2.totalDevSP}</span></div>`;
-    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d2.totalQASP, d1.totalQASP, true)}">${d2.totalQASP}</span></div>`;
-    html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d2.totalBugsIdentified}</span></div>`;
-    html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d2.totalBugsFixed}</span></div>`;
-    html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
-    d2.members.forEach(m => {
-      html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
-    });
+    html += sideHtml(d2, d1, q2);
     html += '</div></div>';
     content.innerHTML = html;
   } catch(e) {
