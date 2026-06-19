@@ -875,23 +875,13 @@ def project_compare():
     team = PROJECT_TEAMS[project]
     project_keys = team.get("keys")
 
-    # Build all (name, quarter) pairs and fetch in parallel
-    all_tasks = []
-    for quarter in (q1, q2):
+    def _quarter_data(quarter):
+        members = []
         for role in ("Dev", "QA"):
             for name in team.get(role, []):
-                all_tasks.append((name, quarter))
-
-    def _fetch(args):
-        name, quarter = args
-        return (name, quarter, _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter))
-
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        results = list(pool.map(_fetch, all_tasks))
-
-    def _build(quarter):
-        members = [data for name, q, data in results if q == quarter and data]
+                data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
+                if data:
+                    members.append(data)
         return {
             "quarter": quarter,
             "totalTickets": sum(m["totalTickets"] for m in members),
@@ -902,7 +892,14 @@ def project_compare():
             "members": members,
         }
 
-    return jsonify({"project": project, "q1": _build(q1), "q2": _build(q2)})
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        f1 = pool.submit(_quarter_data, q1)
+        f2 = pool.submit(_quarter_data, q2)
+        data1 = f1.result()
+        data2 = f2.result()
+
+    return jsonify({"project": project, "q1": data1, "q2": data2})
 
 
 def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
