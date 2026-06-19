@@ -76,14 +76,17 @@ def extract_ticket(issue):
     sp = f.get("customfield_10016") or f.get("customfield_10004")
     sprint_field = f.get("customfield_10006")
     sprint_info = None
-    if sprint_field and isinstance(sprint_field, list) and sprint_field:
-        s = sprint_field[-1]
-        sprint_info = {
-            "name": s.get("name"),
-            "state": s.get("state"),
-            "startDate": (s.get("startDate") or "")[:10],
-            "endDate": (s.get("endDate") or "")[:10],
-        }
+    if sprint_field:
+        if isinstance(sprint_field, dict):
+            sprint_field = sprint_field.get("value", sprint_field)
+        if isinstance(sprint_field, list) and sprint_field:
+            s = sprint_field[-1]
+            sprint_info = {
+                "name": s.get("name"),
+                "state": s.get("state"),
+                "startDate": (s.get("startDate") or "")[:10],
+                "endDate": (s.get("endDate") or "")[:10],
+            }
     parent = f.get("parent")
     parent_info = None
     if parent:
@@ -582,6 +585,8 @@ def sprints():
             continue
         for i in issues:
             sf = i["fields"].get("customfield_10006")
+            if sf and isinstance(sf, dict):
+                sf = sf.get("value", sf)
             if sf and isinstance(sf, list):
                 for s in sf:
                     sn = s.get("name")
@@ -703,7 +708,7 @@ def query():
                 continue
             sname = t["sprint"]["name"]
             state = t["sprint"].get("state", "")
-            target = sprints if state == "active" else prev_sprints
+            target = sprints if (state == "active" or sprint) else prev_sprints
             target.setdefault(sname, {"info": t["sprint"], "tickets": [],
                                       "totalSP": 0, "totalRoleSP": 0})
             target[sname]["tickets"].append(t)
@@ -804,7 +809,10 @@ def _sprint_summary(account_id, display_name, sprint_name, role):
     resolve_role_sp(tickets, role, display_name)
     resolve_bugs(tickets, account_id, role)
     if role == "Dev":
-        tickets = [t for t in tickets if t["type"].lower() not in ("bug-subtask", "bug")]
+        assigned_keys = set(t["key"] for t in tickets)
+        tickets = [t for t in tickets
+                   if t["type"].lower() not in ("bug-subtask", "bug")
+                   or not (t["parent"] and t["parent"]["key"] in assigned_keys)]
     for t in tickets:
         if "qa automation" in t["summary"].lower():
             t["parent"] = None
@@ -896,7 +904,10 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None):
     resolve_role_sp(tickets, role, display_name)
     resolve_bugs(tickets, account_id, role)
     if role == "Dev":
-        tickets = [t for t in tickets if t["type"].lower() not in ("bug-subtask", "bug")]
+        assigned_keys = set(t["key"] for t in tickets)
+        tickets = [t for t in tickets
+                   if t["type"].lower() not in ("bug-subtask", "bug")
+                   or not (t["parent"] and t["parent"]["key"] in assigned_keys)]
     for t in tickets:
         if "qa automation" in t["summary"].lower():
             t["parent"] = None
@@ -1027,6 +1038,9 @@ def automation_view():
         jql = (f'(project in ({proj_keys}){summary_filter}'
                f' AND created >= "{year}-01-01") OR key = PURPLE-5601'
                f' ORDER BY updated DESC') if label == "Controlled Substance" else (
+               f'(project in ({proj_keys}){summary_filter}'
+               f' AND created >= "{year}-01-01") OR key = ORANGE-25686'
+               f' ORDER BY updated DESC') if label == "Openbeds" else (
                f'project in ({proj_keys}){summary_filter}'
                f' AND created >= "{year}-01-01" ORDER BY updated DESC')
         try:
