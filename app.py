@@ -879,7 +879,7 @@ def project_compare():
                      "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
 
     def _lite_summary(name, quarter):
-        """Fast summary — skips SP resolution and bug fetching."""
+        """Fast summary — uses field SP with Dev formula, bulk bug count."""
         try:
             account_id, display_name = find_user(name)
         except Exception:
@@ -899,7 +899,33 @@ def project_compare():
         except Exception:
             issues = []
         tickets = [extract_ticket(i) for i in issues]
-        total_sp = sum(t["storyPoints"] or 0 for t in tickets)
+        # Apply Dev SP formula for devs
+        if role == "Dev":
+            dn = display_name.lower()
+            use_field = any(n in dn or dn in n for n in SP_FROM_FIELD_DEVS)
+            if use_field:
+                total_sp = sum(_dev_sp_from_field(t["storyPoints"]) or 0 for t in tickets)
+            else:
+                total_sp = sum(t["storyPoints"] or 0 for t in tickets)
+        else:
+            total_sp = sum(t["storyPoints"] or 0 for t in tickets)
+
+        # Quick bug count
+        bug_count = 0
+        ticket_keys = set(t["key"] for t in tickets)
+        parent_keys = set(t["parent"]["key"] for t in tickets if t["parent"])
+        try:
+            if role == "Dev" and ticket_keys:
+                keys_jql = ",".join(f'"{k}"' for k in ticket_keys)
+                bugs = jira_search(f'issuetype in (Bug, Bug-Subtask) AND parent in ({keys_jql})')
+                bug_count = len([b for b in bugs if "rejected" not in (b["fields"].get("status") or {}).get("name", "").lower()])
+            elif role == "QA" and parent_keys:
+                parents_jql = ",".join(f'"{k}"' for k in parent_keys)
+                bugs = jira_search(f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}" AND parent in ({parents_jql})')
+                bug_count = len([b for b in bugs if "rejected" not in (b["fields"].get("status") or {}).get("name", "").lower()])
+        except Exception:
+            pass
+
         by_status = {}
         for t in tickets:
             by_status.setdefault(t["status"], []).append(t)
@@ -908,7 +934,7 @@ def project_compare():
             "role": role,
             "totalTickets": len(tickets),
             "totalRoleSP": total_sp,
-            "totalBugs": 0,
+            "totalBugs": bug_count,
             "byStatus": {s: len(ts) for s, ts in by_status.items()},
         }
 
