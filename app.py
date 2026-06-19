@@ -874,12 +874,49 @@ def project_compare():
 
     team = PROJECT_TEAMS[project]
     project_keys = team.get("keys")
+    year = __import__("datetime").date.today().year
+    QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
+                     "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
+
+    def _lite_summary(name, quarter):
+        """Fast summary — skips SP resolution and bug fetching."""
+        try:
+            account_id, display_name = find_user(name)
+        except Exception:
+            return None
+        if not account_id:
+            return None
+        role = get_role(display_name)
+        jql = f'assignee = "{account_id}"'
+        if project_keys:
+            jql += f' AND project in ({",".join(project_keys)})'
+        if quarter in QUARTER_DATES:
+            start, end = QUARTER_DATES[quarter]
+            jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
+        jql += f' {USER_JQL_EXCLUDE.get(display_name.lower(), "")} ORDER BY updated DESC'
+        try:
+            issues = jira_search(jql)
+        except Exception:
+            issues = []
+        tickets = [extract_ticket(i) for i in issues]
+        total_sp = sum(t["storyPoints"] or 0 for t in tickets)
+        by_status = {}
+        for t in tickets:
+            by_status.setdefault(t["status"], []).append(t)
+        return {
+            "name": display_name,
+            "role": role,
+            "totalTickets": len(tickets),
+            "totalRoleSP": total_sp,
+            "totalBugs": 0,
+            "byStatus": {s: len(ts) for s, ts in by_status.items()},
+        }
 
     def _quarter_data(quarter):
         members = []
         for role in ("Dev", "QA"):
             for name in team.get(role, []):
-                data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
+                data = _lite_summary(name, quarter)
                 if data:
                     members.append(data)
         return {
@@ -887,8 +924,8 @@ def project_compare():
             "totalTickets": sum(m["totalTickets"] for m in members),
             "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
             "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
-            "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),
-            "totalBugsIdentified": sum(m["totalBugs"] for m in members if m["role"] == "QA"),
+            "totalBugsFixed": 0,
+            "totalBugsIdentified": 0,
             "members": members,
         }
 
