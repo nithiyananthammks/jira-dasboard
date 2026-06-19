@@ -76,6 +76,7 @@ a:hover{text-decoration:underline}
 .compare-btn.active{background:#58a6ff;color:#0d1117}
 .compare-go{padding:6px 16px;background:#238636;border:none;border-radius:20px;color:#fff;cursor:pointer;font-size:13px;font-weight:600;margin-left:8px}
 .compare-go:hover{background:#2ea043}
+.compare-go:disabled{background:#21262d;color:#484f58;cursor:not-allowed;opacity:.5}
 .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .compare-side{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:16px}
 .compare-side h3{color:#58a6ff;margin-bottom:12px;font-size:15px}
@@ -436,15 +437,13 @@ async function fetchProjectCompare() {
   const content = document.getElementById("content");
   content.innerHTML = '<div class="loading">⏳ Loading Q1 data...</div>';
   try {
-    // Fetch both quarters in parallel (separate requests to avoid timeout)
-    content.innerHTML = '<div class="loading">⏳ Fetching ' + q1 + ' and ' + q2 + ' data...</div>';
-    const [r1, r2] = await Promise.all([
-      fetch(`/api/project/compare?project=${encodeURIComponent(currentProject)}&quarter=${q1}`),
-      fetch(`/api/project/compare?project=${encodeURIComponent(currentProject)}&quarter=${q2}`)
-    ]);
+    content.innerHTML = '<div class="loading">⏳ Fetching ' + q1 + ' data...</div>';
+    const r1 = await fetch(`/api/project/compare?project=${encodeURIComponent(currentProject)}&quarter=${q1}`);
     const d1 = await r1.json();
-    const d2 = await r2.json();
     if (d1.error) { content.innerHTML = `<div class="error">${d1.error}</div>`; return; }
+    content.innerHTML = '<div class="loading">⏳ Fetching ' + q2 + ' data...</div>';
+    const r2 = await fetch(`/api/project/compare?project=${encodeURIComponent(currentProject)}&quarter=${q2}`);
+    const d2 = await r2.json();
     if (d2.error) { content.innerHTML = `<div class="error">${d2.error}</div>`; return; }
     const bar = document.getElementById("parsedBar");
     const year = new Date().getFullYear();
