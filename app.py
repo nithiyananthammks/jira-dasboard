@@ -862,7 +862,7 @@ def compare():
     })
 
 
-def _member_summary(name, sprint=None, project_keys=None, project_name=None):
+def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
     """Fetch summary for a single team member."""
     try:
         account_id, display_name = find_user(name)
@@ -877,6 +877,14 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None):
         jql += f' AND project in ({keys_str})'
     if sprint:
         jql += f' AND sprint = "{sprint}"'
+    elif quarter:
+        import calendar
+        year = __import__("datetime").date.today().year
+        QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
+                         "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
+        if quarter in QUARTER_DATES:
+            start, end = QUARTER_DATES[quarter]
+            jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
     elif project_name == "DISTCH Automation":
         year = __import__("datetime").date.today().year
         jql += f' AND created >= "{year}-01-01"'
@@ -972,6 +980,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None):
 def project_view():
     project = request.args.get("project", "").strip()
     sprint = request.args.get("sprint", "").strip() or None
+    quarter = request.args.get("quarter", "").strip() or None
     if not project or project not in PROJECT_TEAMS:
         return jsonify({"error": f"Unknown project. Available: {list(PROJECT_TEAMS.keys())}"}), 400
     team = PROJECT_TEAMS[project]
@@ -979,7 +988,7 @@ def project_view():
     members = []
     for role in ("Dev", "QA"):
         for name in team.get(role, []):
-            data = _member_summary(name, sprint, project_keys, project_name=project)
+            data = _member_summary(name, sprint, project_keys, project_name=project, quarter=quarter)
             if data:
                 members.append(data)
     # Totals
@@ -992,6 +1001,7 @@ def project_view():
     resp = {
         "project": project,
         "sprint": sprint,
+        "quarter": quarter,
         "members": members,
         "isDistchAutomation": is_distch,
         "devOnly": not team.get("QA"),

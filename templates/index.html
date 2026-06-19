@@ -201,23 +201,25 @@ function onProjectSelect() {
 
 function onSprintChangeForProject() {
   if (currentProject) {
+    document.getElementById("quarterSelect").value = "_none";
     const sprint = document.getElementById("sprintSelect").value || null;
-    fetchProject(currentProject, sprint);
+    fetchProject(currentProject, sprint, null);
   }
 }
 
-async function fetchProject(project, sprint) {
+async function fetchProject(project, sprint, quarter) {
   const content = document.getElementById("content");
   const bar = document.getElementById("parsedBar");
   let url = `/api/project?project=${encodeURIComponent(project)}`;
   if (sprint) url += `&sprint=${encodeURIComponent(sprint)}`;
+  if (quarter) url += `&quarter=${encodeURIComponent(quarter)}`;
   content.innerHTML = '<div class="loading">⏳ Loading project team data...</div>';
   try {
     const resp = await fetch(url);
     const data = await resp.json();
     if (data.error) { content.innerHTML = `<div class="error">${data.error}</div>`; return; }
 
-    bar.innerHTML = `Project: <span>${data.project}</span>` + (data.sprint ? ` · Sprint: <span>${data.sprint}</span>` : ' · <span>Active Sprints</span>');
+    bar.innerHTML = `Project: <span>${data.project}</span>` + (data.sprint ? ` · Sprint: <span>${data.sprint}</span>` : data.quarter ? ` · <span>${data.quarter} ${new Date().getFullYear()}</span>` : ' · <span>Active Sprints</span>');
     bar.style.display = "block";
 
     let html = '<div class="summary-cards">';
@@ -314,7 +316,10 @@ function onQuarterSelect() {
   const name = document.getElementById("teamSelect").value;
   document.getElementById("sprintSelect").value = "_none";
   document.getElementById("monthSelect").value = "_none";
-  if (name) fetchMember(name);
+  if (currentProject) {
+    const quarter = document.getElementById("quarterSelect").value;
+    if (quarter && quarter !== "_none") fetchProject(currentProject, null, quarter);
+  } else if (name) fetchMember(name);
 }
 
 function onMonthSelect() {
