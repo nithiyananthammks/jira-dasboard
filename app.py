@@ -1014,16 +1014,52 @@ def project_view():
     project = request.args.get("project", "").strip()
     sprint = request.args.get("sprint", "").strip() or None
     quarter = request.args.get("quarter", "").strip() or None
+    lite = request.args.get("lite", "").strip() == "1"
     if not project or project not in PROJECT_TEAMS:
         return jsonify({"error": f"Unknown project. Available: {list(PROJECT_TEAMS.keys())}"}), 400
     team = PROJECT_TEAMS[project]
     project_keys = team.get("keys")
     members = []
-    for role in ("Dev", "QA"):
-        for name in team.get(role, []):
-            data = _member_summary(name, sprint, project_keys, project_name=project, quarter=quarter)
-            if data:
-                members.append(data)
+
+    if lite:
+        # Fast mode: skip SP resolution and bug fetching
+        QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
+                         "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
+        year = __import__("datetime").date.today().year
+        for role_key in ("Dev", "QA"):
+            for name in team.get(role_key, []):
+                try:
+                    account_id, display_name = find_user(name)
+                    if not account_id:
+                        continue
+                    role = get_role(display_name)
+                    jql = f'assignee = "{account_id}"'
+                    if project_keys:
+                        jql += f' AND project in ({",".join(project_keys)})'
+                    if sprint:
+                        jql += f' AND sprint = "{sprint}"'
+                    elif quarter and quarter in QUARTER_DATES:
+                        start, end = QUARTER_DATES[quarter]
+                        jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
+                    else:
+                        jql += ' AND sprint in openSprints()'
+                    jql += f' {USER_JQL_EXCLUDE.get(display_name.lower(), "")} ORDER BY updated DESC'
+                    issues = jira_search(jql)
+                    tickets = [extract_ticket(i) for i in issues]
+                    total_sp = sum(t["storyPoints"] or 0 for t in tickets)
+                    members.append({
+                        "name": display_name, "role": role,
+                        "totalTickets": len(tickets), "totalRoleSP": total_sp,
+                        "totalBugs": 0, "byStatus": {},
+                    })
+                except Exception:
+                    pass
+    else:
+        for role in ("Dev", "QA"):
+            for name in team.get(role, []):
+                data = _member_summary(name, sprint, project_keys, project_name=project, quarter=quarter)
+                if data:
+                    members.append(data)
     # Totals
     is_distch = project == "DISTCH Automation"
     total_dev_sp = sum(m["totalRoleSP"] for m in members if m["role"] == "Dev")
