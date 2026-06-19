@@ -878,14 +878,17 @@ def project_compare():
     QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
                      "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
 
-    # Run both quarters in parallel (2 threads), members sequential within each
+    # Run quarters sequentially to avoid threading issues with shared Session
     def _quarter_data(quarter):
         members = []
         for role in ("Dev", "QA"):
             for name in team.get(role, []):
-                data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
-                if data:
-                    members.append(data)
+                try:
+                    data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
+                    if data:
+                        members.append(data)
+                except Exception:
+                    pass
         return {
             "quarter": quarter,
             "totalTickets": sum(m["totalTickets"] for m in members),
@@ -896,18 +899,13 @@ def project_compare():
             "members": members,
         }
 
-    import threading
-    results = [None, None]
-    def _run(idx, quarter):
-        results[idx] = _quarter_data(quarter)
-    t1 = threading.Thread(target=_run, args=(0, q1))
-    t2 = threading.Thread(target=_run, args=(1, q2))
-    t1.start()
-    t2.start()
-    t1.join()
-    t2.join()
+    try:
+        data1 = _quarter_data(q1)
+        data2 = _quarter_data(q2)
+    except Exception as e:
+        return jsonify({"error": f"Compare failed: {str(e)}"}), 500
 
-    return jsonify({"project": project, "q1": results[0], "q2": results[1]})
+    return jsonify({"project": project, "q1": data1, "q2": data2})
 
 
 def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
