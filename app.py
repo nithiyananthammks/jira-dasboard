@@ -878,23 +878,14 @@ def project_compare():
     QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
                      "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
 
-    # Parallelize ALL member+quarter combos for accurate SP
-    all_tasks = []
-    for quarter in (q1, q2):
+    # Run both quarters in parallel (2 threads), members sequential within each
+    def _quarter_data(quarter):
+        members = []
         for role in ("Dev", "QA"):
             for name in team.get(role, []):
-                all_tasks.append((name, quarter))
-
-    from concurrent.futures import ThreadPoolExecutor
-    def _do(args):
-        name, quarter = args
-        return (quarter, _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter))
-
-    with ThreadPoolExecutor(max_workers=10) as pool:
-        results = list(pool.map(_do, all_tasks))
-
-    def _build(quarter):
-        members = [data for q, data in results if q == quarter and data]
+                data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
+                if data:
+                    members.append(data)
         return {
             "quarter": quarter,
             "totalTickets": sum(m["totalTickets"] for m in members),
@@ -905,7 +896,18 @@ def project_compare():
             "members": members,
         }
 
-    return jsonify({"project": project, "q1": _build(q1), "q2": _build(q2)})
+    import threading
+    results = [None, None]
+    def _run(idx, quarter):
+        results[idx] = _quarter_data(quarter)
+    t1 = threading.Thread(target=_run, args=(0, q1))
+    t2 = threading.Thread(target=_run, args=(1, q2))
+    t1.start()
+    t2.start()
+    t1.join()
+    t2.join()
+
+    return jsonify({"project": project, "q1": results[0], "q2": results[1]})
 
 
 def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
