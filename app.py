@@ -862,6 +862,41 @@ def compare():
     })
 
 
+@app.route("/api/project/compare")
+def project_compare():
+    project = request.args.get("project", "").strip()
+    q1 = request.args.get("q1", "").strip()
+    q2 = request.args.get("q2", "").strip()
+    if not project or project not in PROJECT_TEAMS:
+        return jsonify({"error": f"Unknown project. Available: {list(PROJECT_TEAMS.keys())}"}), 400
+    if not q1 or not q2:
+        return jsonify({"error": "q1 and q2 (quarters) are required"}), 400
+
+    team = PROJECT_TEAMS[project]
+    project_keys = team.get("keys")
+
+    def _quarter_data(quarter):
+        members = []
+        for role in ("Dev", "QA"):
+            for name in team.get(role, []):
+                data = _member_summary(name, project_keys=project_keys, project_name=project, quarter=quarter)
+                if data:
+                    members.append(data)
+        return {
+            "quarter": quarter,
+            "totalTickets": sum(m["totalTickets"] for m in members),
+            "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
+            "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
+            "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),
+            "totalBugsIdentified": sum(m["totalBugs"] for m in members if m["role"] == "QA"),
+            "members": members,
+        }
+
+    data1 = _quarter_data(q1)
+    data2 = _quarter_data(q2)
+    return jsonify({"project": project, "q1": data1, "q2": data2})
+
+
 def _member_summary(name, sprint=None, project_keys=None, project_name=None, quarter=None):
     """Fetch summary for a single team member."""
     try:

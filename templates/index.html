@@ -154,6 +154,17 @@ a:hover{text-decoration:underline}
   <select id="compareSprint2" class="team-dropdown" style="min-width:120px"></select>
   <button class="compare-go" onclick="fetchCompare()">Compare</button>
 </div>
+<div id="projectCompareBar" class="parsed" style="display:none">
+  <span>Compare Quarters:</span>
+  <select id="projCompareQ1" class="team-dropdown" style="min-width:80px">
+    <option value="">Select</option><option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3">Q3</option><option value="Q4">Q4</option>
+  </select>
+  <span>vs</span>
+  <select id="projCompareQ2" class="team-dropdown" style="min-width:80px">
+    <option value="">Select</option><option value="Q1">Q1</option><option value="Q2">Q2</option><option value="Q3">Q3</option><option value="Q4">Q4</option>
+  </select>
+  <button class="compare-go" onclick="fetchProjectCompare()">Compare</button>
+</div>
 <div id="parsedBar" class="parsed" style="display:none"></div>
 <div class="container" id="content">
   <div class="no-data">
@@ -179,6 +190,7 @@ function onProjectSelect() {
   document.getElementById("teamSelect").value = "";
   document.getElementById("compareBtn").disabled = true;
   document.getElementById("compareBar").style.display = "none";
+  document.getElementById("projectCompareBar").style.display = "flex";
 
   // Load sprints from all project members
   const sprintSel = document.getElementById("sprintSelect");
@@ -281,6 +293,7 @@ async function fetchProject(project, sprint, quarter) {
 function onTeamSelect() {
   document.getElementById("projectSelect").value = "";
   currentProject = null;
+  document.getElementById("projectCompareBar").style.display = "none";
   const name = document.getElementById("teamSelect").value;
   const sprintSel = document.getElementById("sprintSelect");
   sprintSel.innerHTML = '<option value="_none" selected disabled>🏃 Select Sprint</option><option value="">🏃 All Sprints</option>';
@@ -406,6 +419,53 @@ async function fetchCompare() {
     html += `<div class="compare-side">${side(data.sprint1, data.sprint2)}</div>`;
     html += `<div class="compare-side">${side(data.sprint2, data.sprint1)}</div>`;
     html += '</div>';
+    content.innerHTML = html;
+  } catch(e) {
+    content.innerHTML = `<div class="error">Compare failed: ${e.message}</div>`;
+  }
+}
+
+async function fetchProjectCompare() {
+  const q1 = document.getElementById("projCompareQ1").value;
+  const q2 = document.getElementById("projCompareQ2").value;
+  if (!currentProject || !q1 || !q2) return alert("Select a project and two quarters");
+  if (q1 === q2) return alert("Pick two different quarters");
+  const content = document.getElementById("content");
+  content.innerHTML = '<div class="loading">⏳ Comparing quarters...</div>';
+  try {
+    const resp = await fetch(`/api/project/compare?project=${encodeURIComponent(currentProject)}&q1=${q1}&q2=${q2}`);
+    const data = await resp.json();
+    if (data.error) { content.innerHTML = `<div class="error">${data.error}</div>`; return; }
+    const bar = document.getElementById("parsedBar");
+    const year = new Date().getFullYear();
+    bar.innerHTML = `Project: <span>${data.project}</span> · Comparing <span>${q1} ${year}</span> vs <span>${q2} ${year}</span>`;
+    bar.style.display = "block";
+
+    function cmp(a, b, higher) { return a === b ? '' : (higher ? (a > b ? 'better' : 'worse') : (a < b ? 'better' : 'worse')); }
+
+    let html = '<div class="compare-grid"><div class="compare-side">';
+    html += `<h3>${q1} ${year}</h3>`;
+    html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(data.q1.totalTickets, data.q2.totalTickets, true)}">${data.q1.totalTickets}</span></div>`;
+    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(data.q1.totalDevSP, data.q2.totalDevSP, true)}">${data.q1.totalDevSP}</span></div>`;
+    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(data.q1.totalQASP, data.q2.totalQASP, true)}">${data.q1.totalQASP}</span></div>`;
+    html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${data.q1.totalBugsIdentified}</span></div>`;
+    html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${data.q1.totalBugsFixed}</span></div>`;
+    html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
+    data.q1.members.forEach(m => {
+      html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
+    });
+    html += '</div><div class="compare-side">';
+    html += `<h3>${q2} ${year}</h3>`;
+    html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(data.q2.totalTickets, data.q1.totalTickets, true)}">${data.q2.totalTickets}</span></div>`;
+    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(data.q2.totalDevSP, data.q1.totalDevSP, true)}">${data.q2.totalDevSP}</span></div>`;
+    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(data.q2.totalQASP, data.q1.totalQASP, true)}">${data.q2.totalQASP}</span></div>`;
+    html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${data.q2.totalBugsIdentified}</span></div>`;
+    html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${data.q2.totalBugsFixed}</span></div>`;
+    html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
+    data.q2.members.forEach(m => {
+      html += `<div class="compare-stat"><span>${m.name} (${m.role})</span><span class="val">${m.totalRoleSP} SP · ${m.totalTickets} tickets · ${m.totalBugs} bugs</span></div>`;
+    });
+    html += '</div></div>';
     content.innerHTML = html;
   } catch(e) {
     content.innerHTML = `<div class="error">Compare failed: ${e.message}</div>`;
