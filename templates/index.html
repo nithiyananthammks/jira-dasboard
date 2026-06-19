@@ -455,8 +455,8 @@ async function fetchProjectCompare() {
     let html = '<div class="compare-grid"><div class="compare-side">';
     html += `<h3>${q1} ${year}</h3>`;
     html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d1.totalTickets, d2.totalTickets, true)}">${d1.totalTickets}</span></div>`;
-    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d1.totalDevSP, d2.totalDevSP, true)}">${d1.totalDevSP}</span></div>`;
-    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d1.totalQASP, d2.totalQASP, true)}">${d1.totalQASP}</span></div>`;
+    html += `<div class="compare-stat"><span>Story Points (Dev)</span><span class="val ${cmp(d1.totalDevSP, d2.totalDevSP, true)}">${d1.totalDevSP}</span></div>`;
+    html += `<div class="compare-stat"><span>Story Points (QA)</span><span class="val ${cmp(d1.totalQASP, d2.totalQASP, true)}">${d1.totalQASP}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d1.totalBugsIdentified}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d1.totalBugsFixed}</span></div>`;
     html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
@@ -466,8 +466,8 @@ async function fetchProjectCompare() {
     html += '</div><div class="compare-side">';
     html += `<h3>${q2} ${year}</h3>`;
     html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d2.totalTickets, d1.totalTickets, true)}">${d2.totalTickets}</span></div>`;
-    html += `<div class="compare-stat"><span>Dev SP</span><span class="val ${cmp(d2.totalDevSP, d1.totalDevSP, true)}">${d2.totalDevSP}</span></div>`;
-    html += `<div class="compare-stat"><span>QA SP</span><span class="val ${cmp(d2.totalQASP, d1.totalQASP, true)}">${d2.totalQASP}</span></div>`;
+    html += `<div class="compare-stat"><span>Story Points (Dev)</span><span class="val ${cmp(d2.totalDevSP, d1.totalDevSP, true)}">${d2.totalDevSP}</span></div>`;
+    html += `<div class="compare-stat"><span>Story Points (QA)</span><span class="val ${cmp(d2.totalQASP, d1.totalQASP, true)}">${d2.totalQASP}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Identified</span><span class="val">${d2.totalBugsIdentified}</span></div>`;
     html += `<div class="compare-stat"><span>Bugs Fixed</span><span class="val">${d2.totalBugsFixed}</span></div>`;
     html += '<h4 style="margin-top:12px;color:#8b949e">Members</h4>';
