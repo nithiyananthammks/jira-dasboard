@@ -368,6 +368,12 @@ NAME_ALIASES = {
     "manikanta": "Manikanta Visarapu",
     "reddamma": "Reddamma S.G",
     "nareen": "Nareen Patnana",
+    "jamuna": "jnarayanaswamy@bamboohealth.com",
+}
+
+# Direct account ID mapping for deactivated users who can't be found via search
+DEACTIVATED_USERS = {
+    "jamuna": ("712020:3ffb35eb-6fc2-464a-b772-20c2f1a3c89b", "Jamuna N"),
 }
 
 # Extra JQL filters per user (applied after base query)
@@ -377,6 +383,10 @@ USER_JQL_EXCLUDE = {
 
 
 def find_user(name):
+    # Check deactivated users first
+    deactivated = DEACTIVATED_USERS.get(name.lower())
+    if deactivated:
+        return deactivated
     # Check aliases first
     alias = NAME_ALIASES.get(name.lower())
     if alias:
