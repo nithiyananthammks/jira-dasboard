@@ -43,9 +43,9 @@ PROJECT_TEAMS = {
     "Openbeds O2": {"keys": ["ORANGE"], "sprintPrefixes": ["O2 Sprint"], "Dev": ["Sabarisan"], "QA": ["Akshaya"]},
     "CareCo": {"keys": ["CARECO"], "sprintPrefixes": ["CareCo Sprint"], "Dev": ["Vignesh Murugan", "Manikandan", "Vikram"], "QA": ["Renishma"]},
     "DISTCH Automation": {"keys": ["QA"], "sprintPrefixes": [], "QA": ["Sathish Kumar", "Soorya"]},
-    "DISTCH": {"keys": ["DISTCH"], "sprintPrefixes": ["DISTCH Sprint"], "QA": ["Jamuna", "Suganya"]},
-    "DISTCH DA": {"keys": ["DISTCH"], "sprintPrefixes": ["DISTCH Sprint"], "Dev": ["Raghuvaran", "Manikanta"]},
-    "CS DA": {"keys": ["DSPROD"], "sprintPrefixes": ["CS Sprint"], "Dev": ["Reddamma", "Nareen"]},
+    "DISTCH": {"keys": ["DISTCH"], "sprintPrefixes": ["DistCH Sprint"], "QA": ["Jamuna", "Suganya"]},
+    "DISTCH DA": {"keys": ["DISTCH"], "sprintPrefixes": ["DistCH Sprint"], "Dev": ["Raghuvaran", "Manikanta"]},
+    "CS DA": {"keys": ["DSPROD"], "sprintPrefixes": ["DSPROD Sprint"], "Dev": ["Reddamma", "Nareen"]},
     "ERvive": {"keys": ["RED"], "sprintPrefixes": ["RED Sprint"], "QA": ["Arun"]},
 }
 
