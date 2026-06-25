@@ -465,7 +465,8 @@ async function fetchProjectCompare() {
       const year = new Date().getFullYear();
       const qDates = {Q1:[`${year}-01-01`,`${year}-03-31`], Q2:[`${year}-04-01`,`${year}-06-30`], Q3:[`${year}-07-01`,`${year}-09-30`], Q4:[`${year}-10-01`,`${year}-12-31`]};
       const [qStart, qEnd] = qDates[quarter] || ['',''];
-      const sprints = new Set();
+      const prefixes = (PROJECT_TEAMS[currentProject]||{}).sprintPrefixes || [];
+      const sprintNumbers = new Set();
       const epics = new Set();
       members.forEach(m => {
         (m.tickets||[]).forEach(t => {
@@ -473,7 +474,11 @@ async function fetchProjectCompare() {
             const sStart = (t.sprint.startDate||'').slice(0,10);
             const sEnd = (t.sprint.endDate||'').slice(0,10);
             if ((sStart >= qStart && sStart <= qEnd) || (sEnd >= qStart && sEnd <= qEnd)) {
-              sprints.add(t.sprint.name);
+              const sName = t.sprint.name;
+              if (prefixes.length === 0 || prefixes.some(p => sName.startsWith(p))) {
+                const num = sName.match(/(\d+)/);
+                sprintNumbers.add(num ? num[1] : sName);
+              }
             }
           }
           if (t.epicKey) epics.add(t.epicKey);
@@ -482,7 +487,7 @@ async function fetchProjectCompare() {
       });
       return {
         totalTickets: members.reduce((s,m) => s + (m.totalTickets||0), 0),
-        totalSprints: sprints.size,
+        totalSprints: sprintNumbers.size,
         totalEpics: epics.size,
         totalDevSP: members.filter(m=>m.role==='Dev').reduce((s,m) => s + (m.totalRoleSP||0), 0),
         totalQASP: members.filter(m=>m.role==='QA').reduce((s,m) => s + (m.totalRoleSP||0), 0),

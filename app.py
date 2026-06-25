@@ -37,16 +37,16 @@ TEAM_MEMBERS = {
 }
 
 PROJECT_TEAMS = {
-    "PURPLE": {"keys": ["PURPLE"], "Dev": ["Narayanan", "Ashwin", "Naveen"], "QA": ["Nithiyanantham", "Kalaivani"]},
-    "OTECH": {"keys": ["OTECH"], "Dev": ["Srilatha"], "QA": ["Arun"]},
-    "Openbeds O1": {"keys": ["ORANGE"], "Dev": ["Rajashri", "Geetha"], "QA": ["Srimathi", "Gayathri"]},
-    "Openbeds O2": {"keys": ["ORANGE"], "Dev": ["Sabarisan"], "QA": ["Akshaya"]},
-    "CareCo": {"keys": ["CARECO"], "Dev": ["Vignesh Murugan", "Manikandan", "Vikram"], "QA": ["Renishma"]},
-    "DISTCH Automation": {"keys": ["QA"], "QA": ["Sathish Kumar", "Soorya"]},
-    "DISTCH": {"keys": ["DISTCH"], "QA": ["Jamuna", "Suganya"]},
-    "DISTCH DA": {"keys": ["DISTCH"], "Dev": ["Raghuvaran", "Manikanta"]},
-    "CS DA": {"keys": ["DSPROD"], "Dev": ["Reddamma", "Nareen"]},
-    "ERvive": {"keys": ["RED"], "QA": ["Arun"]},
+    "PURPLE": {"keys": ["PURPLE"], "sprintPrefixes": ["P1 Sprint", "P2 Sprint"], "Dev": ["Narayanan", "Ashwin", "Naveen"], "QA": ["Nithiyanantham", "Kalaivani"]},
+    "OTECH": {"keys": ["OTECH"], "sprintPrefixes": ["OTECH Sprint"], "Dev": ["Srilatha"], "QA": ["Arun"]},
+    "Openbeds O1": {"keys": ["ORANGE"], "sprintPrefixes": ["O1 Sprint"], "Dev": ["Rajashri", "Geetha"], "QA": ["Srimathi", "Gayathri"]},
+    "Openbeds O2": {"keys": ["ORANGE"], "sprintPrefixes": ["O2 Sprint"], "Dev": ["Sabarisan"], "QA": ["Akshaya"]},
+    "CareCo": {"keys": ["CARECO"], "sprintPrefixes": ["CareCo Sprint"], "Dev": ["Vignesh Murugan", "Manikandan", "Vikram"], "QA": ["Renishma"]},
+    "DISTCH Automation": {"keys": ["QA"], "sprintPrefixes": [], "QA": ["Sathish Kumar", "Soorya"]},
+    "DISTCH": {"keys": ["DISTCH"], "sprintPrefixes": ["DISTCH Sprint"], "QA": ["Jamuna", "Suganya"]},
+    "DISTCH DA": {"keys": ["DISTCH"], "sprintPrefixes": ["DISTCH Sprint"], "Dev": ["Raghuvaran", "Manikanta"]},
+    "CS DA": {"keys": ["DSPROD"], "sprintPrefixes": ["CS Sprint"], "Dev": ["Reddamma", "Nareen"]},
+    "ERvive": {"keys": ["RED"], "sprintPrefixes": ["RED Sprint"], "QA": ["Arun"]},
 }
 
 
