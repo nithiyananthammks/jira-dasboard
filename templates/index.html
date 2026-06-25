@@ -476,7 +476,7 @@ async function fetchProjectCompare() {
             if ((sStart >= qStart && sStart <= qEnd) || (sEnd >= qStart && sEnd <= qEnd)) {
               const sName = t.sprint.name;
               if (prefixes.length === 0 || prefixes.some(p => sName.startsWith(p))) {
-                const num = sName.match(/(\d+)/);
+                const num = sName.match(/(\d+)\s*$/);
                 sprintNumbers.add(num ? num[1] : sName);
               }
             }
