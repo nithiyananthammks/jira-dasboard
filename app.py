@@ -893,6 +893,8 @@ def project_compare():
                 unique_sprints.add(t["sprint"]["name"])
             if t.get("epicKey"):
                 unique_epics.add(t["epicKey"])
+            elif t.get("parent") and t["parent"].get("type") == "Epic":
+                unique_epics.add(t["parent"]["key"])
 
     return jsonify({
         "project": project,

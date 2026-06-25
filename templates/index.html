@@ -462,8 +462,19 @@ async function fetchProjectCompare() {
     const m2 = await fetchQuarter(q2);
 
     function totals(members) {
+      const sprints = new Set();
+      const epics = new Set();
+      members.forEach(m => {
+        (m.tickets||[]).forEach(t => {
+          if (t.sprint && t.sprint.name) sprints.add(t.sprint.name);
+          if (t.epicKey) epics.add(t.epicKey);
+          else if (t.parent && t.parent.type === 'Epic') epics.add(t.parent.key);
+        });
+      });
       return {
         totalTickets: members.reduce((s,m) => s + (m.totalTickets||0), 0),
+        totalSprints: sprints.size,
+        totalEpics: epics.size,
         totalDevSP: members.filter(m=>m.role==='Dev').reduce((s,m) => s + (m.totalRoleSP||0), 0),
         totalQASP: members.filter(m=>m.role==='QA').reduce((s,m) => s + (m.totalRoleSP||0), 0),
         totalBugsFixed: members.filter(m=>m.role==='Dev').reduce((s,m) => s + (m.totalBugs||0), 0),
@@ -485,6 +496,8 @@ async function fetchProjectCompare() {
     function sideHtml(d, other, qLabel) {
       let html = `<h3>${qLabel} ${year}</h3>`;
       html += `<div class="compare-stat"><span>Total Tickets</span><span class="val ${cmp(d.totalTickets, other.totalTickets, true)}">${d.totalTickets}</span></div>`;
+      html += `<div class="compare-stat"><span>Sprints</span><span class="val">${d.totalSprints}</span></div>`;
+      html += `<div class="compare-stat"><span>Epics</span><span class="val">${d.totalEpics}</span></div>`;
       if (isDistch) {
         html += `<div class="compare-stat"><span>New Test Cases</span><span class="val ${cmp(d.totalNewTestCases, other.totalNewTestCases, true)}">${d.totalNewTestCases}</span></div>`;
         html += `<div class="compare-stat"><span>Regression Fixes</span><span class="val ${cmp(d.totalRegressionFixes, other.totalRegressionFixes, true)}">${d.totalRegressionFixes}</span></div>`;
