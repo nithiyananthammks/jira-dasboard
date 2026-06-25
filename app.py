@@ -883,10 +883,18 @@ def project_compare():
                     members.append(data)
             except Exception:
                 pass
+    # Collect unique sprints across all members
+    unique_sprints = set()
+    for m in members:
+        for t in m.get("tickets", []):
+            if t.get("sprint") and t["sprint"].get("name"):
+                unique_sprints.add(t["sprint"]["name"])
+
     return jsonify({
         "project": project,
         "quarter": quarter,
         "totalTickets": sum(m["totalTickets"] for m in members),
+        "totalSprints": len(unique_sprints),
         "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
         "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
         "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),
