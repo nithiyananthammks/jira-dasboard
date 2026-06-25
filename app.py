@@ -26,7 +26,7 @@ _user_cache = {}
 
 FIELDS = ["summary", "status", "assignee", "issuetype", "priority",
           "labels", "created", "updated", "customfield_10016", "customfield_10004",
-          "customfield_10006", "parent", "timeoriginalestimate"]
+          "customfield_10006", "customfield_10014", "parent", "timeoriginalestimate"]
 
 TEAM_MEMBERS = {
     "Dev": ["Narayanan", "Ashwin", "Vignesh Murugan", "Manikandan", "Vikram",
@@ -110,6 +110,7 @@ def extract_ticket(issue):
         "updated": (f.get("updated") or "")[:10],
         "sprint": sprint_info,
         "parent": parent_info,
+        "epicKey": f.get("customfield_10014") or (parent_info["key"] if parent_info and parent_info.get("type") == "Epic" else None),
         "roleSP": None,
         "bugs": [],
     }
@@ -885,16 +886,20 @@ def project_compare():
                 pass
     # Collect unique sprints across all members
     unique_sprints = set()
+    unique_epics = set()
     for m in members:
         for t in m.get("tickets", []):
             if t.get("sprint") and t["sprint"].get("name"):
                 unique_sprints.add(t["sprint"]["name"])
+            if t.get("epicKey"):
+                unique_epics.add(t["epicKey"])
 
     return jsonify({
         "project": project,
         "quarter": quarter,
         "totalTickets": sum(m["totalTickets"] for m in members),
         "totalSprints": len(unique_sprints),
+        "totalEpics": len(unique_epics),
         "totalDevSP": sum(m["totalRoleSP"] for m in members if m["role"] == "Dev"),
         "totalQASP": sum(m["totalRoleSP"] for m in members if m["role"] == "QA"),
         "totalBugsFixed": sum(m["totalBugs"] for m in members if m["role"] == "Dev"),

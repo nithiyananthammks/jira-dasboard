@@ -38,6 +38,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .card.red{background:rgba(248,81,73,0.1);border-color:#f85149}
 .card.teal .value{color:#2dd4bf}
 .card.teal{background:rgba(45,212,191,0.1);border-color:#2dd4bf}
+.card.orange .value{color:#f97316}
+.card.orange{background:rgba(249,115,22,0.1);border-color:#f97316}
 .status-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:24px}
 .status-chip{padding:4px 12px;border-radius:20px;font-size:12px;font-weight:600;background:#21262d;border:1px solid #30363d}
 .section{margin-bottom:32px}
@@ -243,6 +245,7 @@ async function fetchProject(project, sprint, quarter) {
     let html = '<div class="summary-cards">';
     html += `<div class="card blue"><div class="value">${data.totalTickets}</div><div class="label">Total Tickets</div></div>`;
     if (data.totalSprints) { html += `<div class="card teal"><div class="value">${data.totalSprints}</div><div class="label">Sprints</div></div>`; }
+    if (data.totalEpics) { html += `<div class="card orange"><div class="value">${data.totalEpics}</div><div class="label">Epics</div></div>`; }
     if (data.isDistchAutomation) {
       html += `<div class="card green"><div class="value">${data.totalNewTestCases||0}</div><div class="label">New Test Cases</div></div>`;
       html += `<div class="card yellow"><div class="value">${data.totalRegressionFixes||0}</div><div class="label">Regression Fixes</div></div>`;
