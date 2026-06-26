@@ -655,7 +655,10 @@ def query():
     elif quarter and quarter in QUARTER_DATES:
         year = __import__("datetime").date.today().year
         start, end = QUARTER_DATES[quarter]
-        jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
+        if is_distch:
+            jql += f' AND created >= "{year}-{start}" AND created <= "{year}-{end}"'
+        else:
+            jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
     else:
         jql += ' AND updated >= startOfYear()'
     jql += ' ' + USER_JQL_EXCLUDE.get(display_name.lower(), '')
