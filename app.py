@@ -38,7 +38,7 @@ TEAM_MEMBERS = {
 
 PROJECT_TEAMS = {
     "PURPLE": {"keys": ["PURPLE"], "sprintPrefixes": ["P1 Sprint", "P2 Sprint"], "Dev": ["Narayanan", "Ashwin", "Naveen"], "QA": ["Nithiyanantham", "Kalaivani"]},
-    "OTECH": {"keys": ["OTECH"], "sprintPrefixes": ["OTECH Sprint"], "Dev": ["Srilatha"], "QA": ["Arun"]},
+    "OTECH": {"keys": ["OTECH"], "sprintPrefixes": ["OTECH-"], "Dev": ["Srilatha"], "QA": ["Arun"]},
     "Openbeds O1": {"keys": ["ORANGE"], "sprintPrefixes": ["O1 Sprint"], "Dev": ["Rajashri", "Geetha"], "QA": ["Srimathi", "Gayathri"]},
     "Openbeds O2": {"keys": ["ORANGE"], "sprintPrefixes": ["O2 Sprint"], "Dev": ["Sabarisan"], "QA": ["Akshaya"]},
     "CareCo": {"keys": ["CARECO"], "sprintPrefixes": ["CareCo Sprint"], "Dev": ["Vignesh Murugan", "Manikandan", "Vikram"], "QA": ["Renishma"]},
