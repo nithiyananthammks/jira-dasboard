@@ -356,6 +356,40 @@ def resolve_bugs(tickets, account_id, role=None):
             t["bugs"] = bugs_by_parent[t["parent"]["key"]]
 
 
+def resolve_epics(tickets):
+    """Batch resolve epic keys for tickets whose parent is not an Epic (grandparent lookup)."""
+    parent_keys_to_check = set()
+    for t in tickets:
+        if not t["epicKey"] and t["parent"] and t["parent"].get("type") not in ("Epic", None, ""):
+            parent_keys_to_check.add(t["parent"]["key"])
+    if not parent_keys_to_check:
+        return
+    # Batch fetch parents to get their epic/parent
+    epic_map = {}
+    def _fetch_parent_epic(key):
+        try:
+            resp = SESSION.get(f"{JIRA_URL}/rest/api/3/issue/{key}",
+                               params={"fields": "parent,customfield_10014"})
+            resp.raise_for_status()
+            f = resp.json().get("fields", {})
+            epic = f.get("customfield_10014")
+            if epic:
+                return key, epic
+            p = f.get("parent")
+            if p and p.get("fields", {}).get("issuetype", {}).get("name") == "Epic":
+                return key, p.get("key")
+        except Exception:
+            pass
+        return key, None
+    with ThreadPoolExecutor(max_workers=10) as pool:
+        for key, epic in pool.map(_fetch_parent_epic, parent_keys_to_check):
+            if epic:
+                epic_map[key] = epic
+    for t in tickets:
+        if not t["epicKey"] and t["parent"] and t["parent"]["key"] in epic_map:
+            t["epicKey"] = epic_map[t["parent"]["key"]]
+
+
 # Aliases for names that don't resolve correctly via Jira search
 NAME_ALIASES = {
     "srilatha": "Srilatha Kommidi",
@@ -691,6 +725,7 @@ def query():
 
     resolve_role_sp(tickets, role, display_name)
     resolve_bugs(tickets, account_id, role)
+    resolve_epics(tickets)
 
     # Dev: remove Bug/Bug-Subtask only if its parent is already in the ticket list
     if role == "Dev":
@@ -822,6 +857,7 @@ def _sprint_summary(account_id, display_name, sprint_name, role):
                         t["parent"]["_spField"] = None
     resolve_role_sp(tickets, role, display_name)
     resolve_bugs(tickets, account_id, role)
+    resolve_epics(tickets)
     if role == "Dev":
         assigned_keys = set(t["key"] for t in tickets)
         tickets = [t for t in tickets
@@ -972,6 +1008,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
                         t["parent"]["_spField"] = None
     resolve_role_sp(tickets, role, display_name)
     resolve_bugs(tickets, account_id, role)
+    resolve_epics(tickets)
     if role == "Dev":
         assigned_keys = set(t["key"] for t in tickets)
         tickets = [t for t in tickets
