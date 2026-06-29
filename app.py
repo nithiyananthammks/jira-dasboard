@@ -713,13 +713,14 @@ def query():
     tickets = [extract_ticket(i) for i in issues]
     role = get_role(display_name)
 
-    # QA: hide QA Time subtasks and extract SP from parent's description/comments only
+    # QA: hide QA Time subtasks only when parent is also in the list (avoid double-counting)
     if role == "QA":
-        # Filter out all QA Time subtasks
-        tickets = [t for t in tickets
-                   if not ("qa time" in t["summary"].lower()
-                           and t["type"].lower().startswith("sub"))]
         parent_keys = set(t["key"] for t in tickets if not t["type"].lower().startswith("sub"))
+        if parent_keys:
+            # Filter out QA Time subtasks whose parent is already in the list
+            tickets = [t for t in tickets
+                       if not ("qa time" in t["summary"].lower()
+                               and t["parent"] and t["parent"]["key"] in parent_keys)]
         if parent_keys:
             # For parent tickets, clear SP field so it falls through to desc/comment extraction
             for t in tickets:
@@ -850,11 +851,11 @@ def _sprint_summary(account_id, display_name, sprint_name, role):
     issues = jira_search(jql)
     tickets = [extract_ticket(i) for i in issues]
     if role == "QA":
-        tickets = [t for t in tickets
-                   if not ("qa time" in t["summary"].lower()
-                           and t["type"].lower().startswith("sub"))]
         parent_keys = set(t["key"] for t in tickets if not t["type"].lower().startswith("sub"))
         if parent_keys:
+            tickets = [t for t in tickets
+                       if not ("qa time" in t["summary"].lower()
+                               and t["parent"] and t["parent"]["key"] in parent_keys)]
             for t in tickets:
                 if t["key"] in parent_keys:
                     t["storyPoints"] = None
@@ -1001,11 +1002,11 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
     tickets = [extract_ticket(i) for i in issues]
     # QA parent ticket handling
     if role == "QA":
-        tickets = [t for t in tickets
-                   if not ("qa time" in t["summary"].lower()
-                           and t["type"].lower().startswith("sub"))]
         parent_keys = set(t["key"] for t in tickets if not t["type"].lower().startswith("sub"))
         if parent_keys:
+            tickets = [t for t in tickets
+                       if not ("qa time" in t["summary"].lower()
+                               and t["parent"] and t["parent"]["key"] in parent_keys)]
             for t in tickets:
                 if t["key"] in parent_keys:
                     t["storyPoints"] = None
@@ -1268,10 +1269,11 @@ def defects_view():
 
     # QA: filter same as dashboard
     if role == "QA":
-        tickets = [t for t in tickets
-                   if not ("qa time" in t["summary"].lower()
-                           and t["type"].lower().startswith("sub"))]
         pk_set = set(t["key"] for t in tickets if not t["type"].lower().startswith("sub"))
+        if pk_set:
+            tickets = [t for t in tickets
+                       if not ("qa time" in t["summary"].lower()
+                               and t["parent"] and t["parent"]["key"] in pk_set)]
 
     # Step 2: Find bugs using same logic as resolve_bugs
     bug_issues = []
