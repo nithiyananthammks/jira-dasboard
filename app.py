@@ -666,6 +666,7 @@ def query():
 
     quarter = request.args.get("quarter", "").strip()
     month = request.args.get("month", "").strip()
+    project = request.args.get("project", "").strip()
 
     QUARTER_DATES = {
         "Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
@@ -673,6 +674,11 @@ def query():
     }
 
     jql = f'assignee = "{account_id}"'
+    # Apply project filter if specified
+    if project and project in PROJECT_TEAMS:
+        proj_keys = PROJECT_TEAMS[project].get("keys", [])
+        if proj_keys:
+            jql += f' AND project in ({",".join(proj_keys)})'
     distch_members = [m.lower() for m in PROJECT_TEAMS.get("DISTCH Automation", {}).get("QA", [])]
     is_distch = any(m in display_name.lower() for m in distch_members)
     if is_distch:

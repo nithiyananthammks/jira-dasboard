@@ -449,7 +449,7 @@ async function fetchProjectCompare() {
     for (const name of allMembers) {
       content.innerHTML = `<div class="loading">⏳ ${quarter}: Loading ${name}...</div>`;
       try {
-        const r = await fetch(`/api/query?q=${encodeURIComponent(name)}&quarter=${quarter}`);
+        const r = await fetch(`/api/query?q=${encodeURIComponent(name)}&quarter=${quarter}&project=${encodeURIComponent(currentProject)}`);
         const d = await r.json();
         if (!d.error) members.push(d);
       } catch(e) {}
