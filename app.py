@@ -281,8 +281,8 @@ def resolve_role_sp(tickets, role, display_name=None):
             t["parent"].pop("_spField", None)
 
 
-def resolve_bugs(tickets, account_id, role=None):
-    """Find bug tickets. Dev: subtasks of assigned ticket. QA: under parent ticket."""
+def resolve_bugs(tickets, account_id, role=None, sprint_name=None):
+    """Find bug tickets. Dev: subtasks of assigned ticket. QA: creator-based search."""
     if role == "Dev":
         ticket_keys = set(t["key"] for t in tickets)
         if not ticket_keys:
@@ -316,19 +316,29 @@ def resolve_bugs(tickets, account_id, role=None):
                 t["bugs"] = bugs_by_ticket[t["key"]]
         return
 
-    # QA: Get all bugs created by this member, scoped by project keys
+    # QA: Get all bugs created by this member, scoped by project and sprint
     project_keys = set()
+    sprint_names = set()
     if tickets:
-        # Derive project keys from the tickets themselves
         for t in tickets:
             k = t["key"].rsplit("-", 1)[0]
             project_keys.add(k)
+            if t.get("sprint") and t["sprint"].get("name"):
+                sprint_names.add(t["sprint"]["name"])
     if not project_keys:
         return
     project_filter = " AND project in (" + ",".join(
         f'"{k}"' for k in project_keys) + ")"
+    # If we have sprint context, scope bugs to those sprints; otherwise use year
+    if sprint_name:
+        time_filter = f' AND sprint = "{sprint_name}"'
+    elif sprint_names:
+        sprint_filter = ",".join(f'"{s}"' for s in sprint_names)
+        time_filter = f' AND sprint in ({sprint_filter})'
+    else:
+        time_filter = " AND created >= startOfYear()"
     jql = (f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}"'
-           f' AND created >= startOfYear(){project_filter}'
+           f'{time_filter}{project_filter}'
            f' ORDER BY created DESC')
     try:
         bug_issues = jira_search(jql)
@@ -871,7 +881,7 @@ def _sprint_summary(account_id, display_name, sprint_name, role):
                     if t["parent"]:
                         t["parent"]["_spField"] = None
     resolve_role_sp(tickets, role, display_name)
-    resolve_bugs(tickets, account_id, role)
+    resolve_bugs(tickets, account_id, role, sprint_name)
     resolve_epics(tickets)
     if role == "Dev":
         assigned_keys = set(t["key"] for t in tickets)
