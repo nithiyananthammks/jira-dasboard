@@ -336,10 +336,8 @@ def resolve_bugs(tickets, account_id, role=None, sprint_name=None):
         return
     project_filter = " AND project in (" + ",".join(
         f'"{k}"' for k in project_keys) + ")"
-    # Scope by date range from sprints
-    if sprint_name:
-        time_filter = f' AND sprint = "{sprint_name}"'
-    elif sprint_start and sprint_end:
+    # Scope by date range from sprints (avoids double-counting bugs in multiple sprints)
+    if sprint_start and sprint_end:
         time_filter = f' AND created >= "{sprint_start}" AND created <= "{sprint_end}"'
     else:
         time_filter = " AND created >= startOfYear()"
