@@ -759,7 +759,7 @@ def query():
                         t["parent"]["_spField"] = None
 
     resolve_role_sp(tickets, role, display_name)
-    resolve_bugs(tickets, account_id, role)
+    resolve_bugs(tickets, account_id, role, quarter=quarter)
     resolve_epics(tickets)
 
     # Dev: remove Bug/Bug-Subtask only if its parent is already in the ticket list
