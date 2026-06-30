@@ -316,25 +316,31 @@ def resolve_bugs(tickets, account_id, role=None, sprint_name=None):
                 t["bugs"] = bugs_by_ticket[t["key"]]
         return
 
-    # QA: Get all bugs created by this member, scoped by project and sprint
+    # QA: Get all bugs created by this member, scoped by project and sprint dates
     project_keys = set()
-    sprint_names = set()
+    sprint_start = None
+    sprint_end = None
     if tickets:
         for t in tickets:
             k = t["key"].rsplit("-", 1)[0]
             project_keys.add(k)
-            if t.get("sprint") and t["sprint"].get("name"):
-                sprint_names.add(t["sprint"]["name"])
+            if t.get("sprint"):
+                s = t["sprint"]
+                sd = (s.get("startDate") or "")[:10]
+                ed = (s.get("endDate") or "")[:10]
+                if sd and (not sprint_start or sd < sprint_start):
+                    sprint_start = sd
+                if ed and (not sprint_end or ed > sprint_end):
+                    sprint_end = ed
     if not project_keys:
         return
     project_filter = " AND project in (" + ",".join(
         f'"{k}"' for k in project_keys) + ")"
-    # If we have sprint context, scope bugs to those sprints; otherwise use year
+    # Scope by date range from sprints
     if sprint_name:
         time_filter = f' AND sprint = "{sprint_name}"'
-    elif sprint_names:
-        sprint_filter = ",".join(f'"{s}"' for s in sprint_names)
-        time_filter = f' AND sprint in ({sprint_filter})'
+    elif sprint_start and sprint_end:
+        time_filter = f' AND created >= "{sprint_start}" AND created <= "{sprint_end}"'
     else:
         time_filter = " AND created >= startOfYear()"
     jql = (f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}"'
