@@ -281,7 +281,7 @@ def resolve_role_sp(tickets, role, display_name=None):
             t["parent"].pop("_spField", None)
 
 
-def resolve_bugs(tickets, account_id, role=None, sprint_name=None):
+def resolve_bugs(tickets, account_id, role=None, sprint_name=None, quarter=None):
     """Find bug tickets. Dev: subtasks of assigned ticket. QA: creator-based search."""
     if role == "Dev":
         ticket_keys = set(t["key"] for t in tickets)
@@ -336,8 +336,14 @@ def resolve_bugs(tickets, account_id, role=None, sprint_name=None):
         return
     project_filter = " AND project in (" + ",".join(
         f'"{k}"' for k in project_keys) + ")"
-    # Scope by date range from sprints (avoids double-counting bugs in multiple sprints)
-    if sprint_start and sprint_end:
+    # Scope by date range (calendar quarter > sprint dates > year)
+    QUARTER_DATES = {"Q1": ("01-01", "03-31"), "Q2": ("04-01", "06-30"),
+                     "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
+    year = __import__("datetime").date.today().year
+    if quarter and quarter in QUARTER_DATES:
+        start, end = QUARTER_DATES[quarter]
+        time_filter = f' AND created >= "{year}-{start}" AND created <= "{year}-{end}"'
+    elif sprint_start and sprint_end:
         time_filter = f' AND created >= "{sprint_start}" AND created <= "{sprint_end}"'
     else:
         time_filter = " AND created >= startOfYear()"
@@ -1036,7 +1042,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
                     if t["parent"]:
                         t["parent"]["_spField"] = None
     resolve_role_sp(tickets, role, display_name)
-    resolve_bugs(tickets, account_id, role)
+    resolve_bugs(tickets, account_id, role, quarter=quarter)
     resolve_epics(tickets)
     if role == "Dev":
         assigned_keys = set(t["key"] for t in tickets)
