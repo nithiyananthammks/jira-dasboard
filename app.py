@@ -1288,35 +1288,23 @@ def defects_view():
             except Exception:
                 bug_issues = []
     else:
-        parent_keys = set()
-        for t in tickets:
-            if t["parent"]:
-                parent_keys.add(t["parent"]["key"])
-        if parent_keys:
-            parents_jql = ",".join(f'"{k}"' for k in parent_keys)
-            try:
-                bug_issues = jira_search(
-                    f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}"'
-                    f' AND (parent in ({parents_jql}) OR "Epic Link" in ({parents_jql}))'
-                    f' ORDER BY created DESC')
-            except Exception:
-                try:
-                    bug_issues = jira_search(
-                        f'issuetype in (Bug, Bug-Subtask, Sub-task) AND'
-                        f' creator = "{account_id}" AND parent in ({parents_jql})'
-                        f' ORDER BY created DESC')
-                except Exception:
-                    bug_issues = []
-
-        # Also include bugs in "Bugs to Discuss/Reject" sprint created by QA member
+        # QA: Get all bugs created by this member this year, scoped by project
+        project_keys = set()
+        for pname, pconf in PROJECT_TEAMS.items():
+            members = pconf.get("QA", []) + pconf.get("Dev", [])
+            if member in members or display_name in members:
+                project_keys.update(pconf.get("keys", []))
+        project_filter = ""
+        if project_keys:
+            project_filter = " AND project in (" + ",".join(
+                f'"{k}"' for k in project_keys) + ")"
         try:
-            discuss_bugs = jira_search(
+            bug_issues = jira_search(
                 f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}"'
-                f' AND sprint = "Bugs to Discuss/Reject"'
+                f' AND created >= startOfYear(){project_filter}'
                 f' ORDER BY created DESC')
-            bug_issues.extend(discuss_bugs)
         except Exception:
-            pass
+            bug_issues = []
 
     # Step 3: Filter (same as resolve_bugs) and group by sprint
     sprints = {}
