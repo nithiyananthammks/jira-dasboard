@@ -316,28 +316,31 @@ def resolve_bugs(tickets, account_id, role=None):
                 t["bugs"] = bugs_by_ticket[t["key"]]
         return
 
-    # QA: existing behavior — bugs under parent ticket
+    # QA: Get all bugs created by this member, scoped by project keys
+    project_keys = set()
+    if tickets:
+        # Derive project keys from the tickets themselves
+        for t in tickets:
+            k = t["key"].rsplit("-", 1)[0]
+            project_keys.add(k)
+    if not project_keys:
+        return
+    project_filter = " AND project in (" + ",".join(
+        f'"{k}"' for k in project_keys) + ")"
+    jql = (f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}"'
+           f' AND created >= startOfYear(){project_filter}'
+           f' ORDER BY created DESC')
+    try:
+        bug_issues = jira_search(jql)
+    except Exception:
+        bug_issues = []
+    # Attach bugs to tickets by matching parent, and track unlinked bugs
     parent_keys = set()
     for t in tickets:
         if t["parent"]:
             parent_keys.add(t["parent"]["key"])
-    if not parent_keys:
-        return
-    parents_jql = ",".join(f'"{k}"' for k in parent_keys)
-    jql = (f'issuetype in (Bug, Bug-Subtask) AND creator = "{account_id}" AND '
-           f'(parent in ({parents_jql}) OR "Epic Link" in ({parents_jql})) '
-           f'ORDER BY created DESC')
-    try:
-        bug_issues = jira_search(jql)
-    except Exception:
-        try:
-            jql = (f'issuetype in (Bug, Bug-Subtask, Sub-task) AND '
-                   f'creator = "{account_id}" AND parent in ({parents_jql}) '
-                   f'ORDER BY created DESC')
-            bug_issues = jira_search(jql)
-        except Exception:
-            bug_issues = []
     bugs_by_parent = {}
+    unlinked_bugs = []
     for b in bug_issues:
         bf = b["fields"]
         bug_status = (bf.get("status") or {}).get("name", "")
@@ -345,15 +348,21 @@ def resolve_bugs(tickets, account_id, role=None):
             continue
         p = bf.get("parent")
         pk = p.get("key") if p else None
+        bug_entry = {
+            "key": b["key"],
+            "summary": bf.get("summary", ""),
+            "status": (bf.get("status") or {}).get("name", ""),
+        }
         if pk and pk in parent_keys:
-            bugs_by_parent.setdefault(pk, []).append({
-                "key": b["key"],
-                "summary": bf.get("summary", ""),
-                "status": (bf.get("status") or {}).get("name", ""),
-            })
+            bugs_by_parent.setdefault(pk, []).append(bug_entry)
+        else:
+            unlinked_bugs.append(bug_entry)
     for t in tickets:
         if t["parent"] and t["parent"]["key"] in bugs_by_parent:
             t["bugs"] = bugs_by_parent[t["parent"]["key"]]
+    # Attach unlinked bugs to the first ticket so they get counted
+    if unlinked_bugs and tickets:
+        tickets[0].setdefault("bugs", []).extend(unlinked_bugs)
 
 
 def resolve_epics(tickets):
