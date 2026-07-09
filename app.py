@@ -39,8 +39,8 @@ TEAM_MEMBERS = {
 PROJECT_TEAMS = {
     "PURPLE": {"keys": ["PURPLE"], "sprintPrefixes": ["P1 Sprint", "P2 Sprint"], "Dev": ["Narayanan", "Ashwin", "Naveen"], "QA": ["Nithiyanantham", "Kalaivani"]},
     "OTECH": {"keys": ["OTECH"], "sprintPrefixes": ["OTECH-"], "Dev": ["Srilatha"], "QA": ["Arun"]},
-    "Openbeds O1": {"keys": ["ORANGE"], "sprintPrefixes": ["O1 Sprint"], "Dev": ["Rajashri", "Geetha"], "QA": ["Srimathi", "Gayathri"]},
-    "Openbeds O2": {"keys": ["ORANGE"], "sprintPrefixes": ["O2 Sprint"], "Dev": ["Sabarisan"], "QA": ["Akshaya"]},
+    "Openbeds O1": {"keys": ["ORANGE"], "sprintPrefixes": ["O1 Sprint"], "Dev": ["Rajashri"], "QA": ["Gayathri"]},
+    "Openbeds O2": {"keys": ["ORANGE"], "sprintPrefixes": ["O2 Sprint"], "Dev": ["Sabarisan", "Geetha"], "QA": ["Akshaya", "Srimathi"]},
     "CareCo": {"keys": ["CARECO"], "sprintPrefixes": ["CareCo Sprint"], "Dev": ["Vignesh Murugan", "Manikandan", "Vikram"], "QA": ["Renishma"]},
     "DISTCH Automation": {"keys": ["QA"], "sprintPrefixes": [], "QA": ["Sathish Kumar", "Soorya"]},
     "DISTCH": {"keys": ["DISTCH"], "sprintPrefixes": ["DistCH Sprint"], "QA": ["Jamuna", "Suganya"]},
