@@ -150,6 +150,7 @@ a:hover{text-decoration:underline}
     <button id="compareBtn" class="compare-btn" onclick="toggleCompare()" disabled>⚖️</button>
     <button class="compare-btn" onclick="loadAutomation()">🤖 Automation</button>
     <button class="compare-btn" onclick="showDefectsTracker()">🐛 Defects Tracker</button>
+    <button class="compare-btn" onclick="showCycleTime()">⏱ Cycle Time</button>
   </div>
 </div>
 <div id="compareBar" class="parsed" style="display:none">
@@ -893,6 +894,7 @@ async function loadAutomation() {
 }
 
 const TEAM_MEMBERS_MAP = {{ team_members | tojson }};
+const PROJECT_TEAMS_MAP = {{ project_teams | tojson }};
 
 function showDefectsTracker() {
   const bar = document.getElementById("parsedBar");
@@ -947,6 +949,117 @@ async function fetchDefects() {
       html += `<tr><td><strong>No Sprint</strong></td><td></td><td></td><td></td><td style="text-align:center;font-weight:700;color:#8b949e">${data.noSprint}</td></tr>`;
     }
     html += `<tr style="border-top:2px solid #58a6ff;font-weight:700"><td>Total</td><td></td><td></td><td></td><td style="text-align:center;color:#58a6ff">${data.total}</td></tr>`;
+    html += '</tbody></table></div>';
+    result.innerHTML = html;
+  } catch(e) {
+    result.innerHTML = `<div class="error">Failed: ${e.message}</div>`;
+  }
+}
+
+function showCycleTime() {
+  const bar = document.getElementById("parsedBar");
+  bar.innerHTML = "⏱ <span>Sprint Cycle Time</span>";
+  bar.style.display = "block";
+  document.getElementById("projectSelect").value = "";
+  currentProject = null;
+
+  let html = '<div class="section"><h2>⏱ Sprint Cycle Time</h2>';
+  html += '<div style="display:flex;gap:12px;margin-bottom:20px;align-items:center">';
+  html += '<select id="cycleTeam" class="team-dropdown" onchange="onCycleTeamChange()"><option value="">Select Team</option><option value="Dev">Dev</option><option value="QA">QA</option><option value="DA">DA</option></select>';
+  html += '<select id="cycleMember" class="team-dropdown" onchange="onCycleMemberChange()" disabled><option value="">Select Member</option></select>';
+  html += '<select id="cycleSprint" class="team-dropdown" onchange="fetchCycleTime()" disabled><option value="">Select Sprint</option></select>';
+  html += '</div>';
+  html += '<div id="cycleResult"></div></div>';
+  document.getElementById("content").innerHTML = html;
+}
+
+function onCycleTeamChange() {
+  const team = document.getElementById("cycleTeam").value;
+  const memberSel = document.getElementById("cycleMember");
+  const sprintSel = document.getElementById("cycleSprint");
+  memberSel.innerHTML = '<option value="">Select Member</option>';
+  memberSel.disabled = !team;
+  sprintSel.innerHTML = '<option value="">Select Sprint</option>';
+  sprintSel.disabled = true;
+  document.getElementById("cycleResult").innerHTML = '';
+  if (!team) return;
+  (TEAM_MEMBERS_MAP[team]||[]).forEach(n => {
+    const o = document.createElement("option");
+    o.value = n; o.textContent = n;
+    memberSel.appendChild(o);
+  });
+}
+
+async function onCycleMemberChange() {
+  const member = document.getElementById("cycleMember").value;
+  const sprintSel = document.getElementById("cycleSprint");
+  sprintSel.innerHTML = '<option value="">Current Sprint</option>';
+  sprintSel.disabled = false;
+  document.getElementById("cycleResult").innerHTML = '';
+  if (!member) { sprintSel.disabled = true; return; }
+
+  // Fetch member data to get their sprints
+  try {
+    const resp = await fetch(`/api/query?q=fetch details of ${encodeURIComponent(member)}`);
+    const data = await resp.json();
+    if (data.currentSprints) {
+      Object.keys(data.currentSprints).forEach(s => {
+        const o = document.createElement("option");
+        o.value = s; o.textContent = s + " (active)";
+        sprintSel.appendChild(o);
+      });
+    }
+    if (data.previousSprints) {
+      Object.keys(data.previousSprints).forEach(s => {
+        const o = document.createElement("option");
+        o.value = s; o.textContent = s;
+        sprintSel.appendChild(o);
+      });
+    }
+  } catch(e) {}
+  // Auto-fetch with current sprint (empty = openSprints)
+  fetchCycleTime();
+}
+
+async function fetchCycleTime() {
+  const member = document.getElementById("cycleMember").value;
+  const sprint = document.getElementById("cycleSprint").value;
+  const result = document.getElementById("cycleResult");
+  if (!member) return;
+  result.innerHTML = '<div class="loading">⏳ Loading cycle time data...</div>';
+
+  try {
+    let url = `/api/cycle-time?member=${encodeURIComponent(member)}`;
+    if (sprint) url += `&sprint=${encodeURIComponent(sprint)}`;
+    const resp = await fetch(url);
+    const data = await resp.json();
+    if (data.error) { result.innerHTML = `<div class="error">${data.error}</div>`; return; }
+
+    let html = '<div class="summary-cards">';
+    html += `<div class="card blue"><div class="value">${data.totalTickets}</div><div class="label">Total Tickets</div></div>`;
+    html += `<div class="card green"><div class="value">${data.completedTickets}</div><div class="label">Completed</div></div>`;
+    html += `<div class="card"><div class="value">${data.totalSP}</div><div class="label">Total SP</div></div>`;
+    html += `<div class="card"><div class="value" style="color:${data.avgCycleDays <= 3 ? '#3fb950' : data.avgCycleDays <= 5 ? '#d29922' : '#f85149'}">${data.avgCycleDays || '-'}</div><div class="label">Avg Cycle Days</div></div>`;
+    html += `<div class="card green"><div class="value">${data.fastest || '-'}</div><div class="label">Fastest</div></div>`;
+    html += `<div class="card red"><div class="value">${data.slowest || '-'}</div><div class="label">Slowest</div></div>`;
+    html += '</div>';
+
+    // Ticket table
+    html += '<div class="tbl-wrap"><table><thead><tr><th>Ticket</th><th>Summary</th><th>Type</th><th>Status</th><th style="text-align:center">SP</th><th>Start Date</th><th>Completed Date</th><th style="text-align:center">Cycle Days</th></tr></thead><tbody>';
+    data.tickets.forEach(t => {
+      const cdColor = !t.cycleDays ? '#8b949e' : t.cycleDays <= 3 ? '#3fb950' : t.cycleDays <= 5 ? '#d29922' : '#f85149';
+      const stCls = t.status.toLowerCase().includes('done') ? 'badge-done' : t.status.toLowerCase().includes('progress') || t.status.toLowerCase().includes('test') ? 'badge-progress' : 'badge-open';
+      html += `<tr>`;
+      html += `<td><a href="https://hbuco.atlassian.net/browse/${t.key}" target="_blank" style="color:#58a6ff">${t.key}</a></td>`;
+      html += `<td>${t.summary.substring(0, 60)}${t.summary.length > 60 ? '...' : ''}</td>`;
+      html += `<td>${t.type}</td>`;
+      html += `<td><span class="badge ${stCls}">${t.status}</span></td>`;
+      html += `<td style="text-align:center">${t.sp}</td>`;
+      html += `<td>${t.startDate || '-'}</td>`;
+      html += `<td>${t.completedDate || '-'}</td>`;
+      html += `<td style="text-align:center;font-weight:700;color:${cdColor}">${t.cycleDays || '-'}</td>`;
+      html += '</tr>';
+    });
     html += '</tbody></table></div>';
     result.innerHTML = html;
   } catch(e) {

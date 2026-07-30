@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 load_dotenv(override=True)
 
 app = Flask(__name__)
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "bh-dashboard-2026-secret")
 
 JIRA_URL = os.environ.get("JIRA_URL", "https://hbuco.atlassian.net")
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME")
@@ -234,13 +235,29 @@ def resolve_role_sp(tickets, role, display_name=None):
         return
 
     # QA: existing behavior — check fields, then ticket, then parent
+    # But exclude Bug-Subtasks from SP (they inherit parent SP which is already counted via QA subtask)
     needs_ticket_lookup = []
     needs_parent_lookup = set()
     parent_field_cache = {}
+    # Track which parents already have a QA subtask carrying their SP
+    parents_with_qa_subtask = set()
+    for t in tickets:
+        summary_lower = t.get("summary", "").lower().replace("clone - ", "").strip()
+        if summary_lower.startswith("qa time") or summary_lower.startswith("qa -") or summary_lower.startswith("qa-"):
+            p = t["parent"]
+            if p:
+                parents_with_qa_subtask.add(p["key"])
 
     for t in tickets:
         p = t["parent"]
         pk = p["key"] if p else None
+        issue_type = t.get("type", "").lower()
+
+        # Bug-Subtasks: don't assign SP if parent already has a QA subtask
+        if issue_type in ("bug-subtask", "bug") and pk and pk in parents_with_qa_subtask:
+            t["roleSP"] = 0
+            continue
+
         if t["storyPoints"]:
             t["roleSP"] = float(t["storyPoints"])
             if p:
@@ -599,8 +616,54 @@ def extract_dev_sp_from_comments(issue_key):
 
 
 
+ALLOWED_EMAILS = {"nl@bamboohealth.com", "ng@bamboohealth.com", "satreyapurapu@bamboohealth.com"}
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        if email in ALLOWED_EMAILS:
+            from flask import session, redirect
+            session["user"] = email
+            return redirect("/")
+        return '''
+        <html><body style="background:#0d1117;color:#f85149;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column">
+        <h2>Access Denied</h2><p>Email not authorized.</p>
+        <a href="/login" style="color:#58a6ff">Try again</a>
+        </body></html>'''
+    return '''
+    <html><body style="background:#0d1117;color:#c9d1d9;font-family:sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column">
+    <div style="background:#161b22;padding:40px;border-radius:12px;border:1px solid #30363d;text-align:center">
+    <h2 style="margin-bottom:20px">📊 Team Delivery Dashboard</h2>
+    <p style="color:#8b949e;margin-bottom:20px">Enter your Bamboo Health email to access</p>
+    <form method="POST">
+    <input type="email" name="email" placeholder="your@bamboohealth.com" required
+     style="padding:10px 16px;width:280px;border-radius:6px;border:1px solid #30363d;background:#0d1117;color:#c9d1d9;font-size:14px;margin-bottom:12px"><br>
+    <button type="submit" style="padding:10px 24px;background:#238636;color:white;border:none;border-radius:6px;font-size:14px;cursor:pointer;font-weight:600">Login</button>
+    </form></div>
+    </body></html>'''
+
+
+@app.route("/logout")
+def logout():
+    from flask import session, redirect
+    session.pop("user", None)
+    return redirect("/login")
+
+
+def require_login():
+    from flask import session, redirect
+    if "user" not in session:
+        return redirect("/login")
+    return None
+
+
 @app.route("/")
 def index():
+    auth = require_login()
+    if auth:
+        return auth
     return render_template("index.html", jira_url=JIRA_URL, team_members=TEAM_MEMBERS, project_teams=PROJECT_TEAMS)
 
 
@@ -1370,6 +1433,249 @@ def defects_view():
     return jsonify({"member": display_name, "team": team, "column": col,
                     "sprints": sprint_list, "noSprint": no_sprint,
                     "total": sum(s["count"] for s in sprint_list) + no_sprint})
+
+
+@app.route("/api/cycle-time")
+def cycle_time_view():
+    """Sprint Cycle Time per member: shows individual ticket cycle days."""
+    from datetime import datetime as _dt, timedelta as _td
+
+    member_name = request.args.get("member", "").strip()
+    sprint_name = request.args.get("sprint", "").strip()
+
+    if not member_name:
+        return jsonify({"error": "member parameter required"}), 400
+
+    # Find user
+    try:
+        account_id, display_name = find_user(member_name)
+    except Exception as e:
+        return jsonify({"error": f"User lookup failed: {e}"}), 500
+    if not account_id:
+        return jsonify({"error": f"No user found matching '{member_name}'"}), 404
+
+    role = get_role(display_name)
+
+    # Build JQL
+    jql = f'assignee = "{account_id}"'
+    if sprint_name:
+        jql += f' AND sprint = "{sprint_name}"'
+    else:
+        jql += ' AND sprint in openSprints()'
+    jql += ' ORDER BY updated DESC'
+
+    try:
+        issues = jira_search(jql)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    def count_weekdays(d1, d2):
+        days = 0
+        current = d1
+        while current < d2:
+            if current.weekday() < 5:
+                days += 1
+            current += _td(days=1)
+        return days if days > 0 else 1
+
+    def get_cycle_dates(issue_key, check_role):
+        """Get start and end dates from changelog based on role."""
+        start_date, completed_date = "", ""
+        try:
+            resp = SESSION.get(f"{JIRA_URL}/rest/api/3/issue/{issue_key}",
+                               params={"expand": "changelog", "fields": "status"})
+            resp.raise_for_status()
+            histories = resp.json().get("changelog", {}).get("histories", [])
+            histories.sort(key=lambda h: h.get("created", ""))
+
+            dev_start = {"in progress", "in development"}
+            dev_end = {"ready for test", "uat", "ready for release", "done"}
+            qa_start = {"in test"}
+            qa_end = {"uat", "ready for release", "done"}
+            regression_start = {"in progress", "in development", "in test"}
+            regression_end = {"done", "closed"}
+
+            for history in histories:
+                for item in history.get("items", []):
+                    if item.get("field") == "status":
+                        to_status = item.get("toString", "").lower()
+                        from_status = item.get("fromString", "").lower()
+                        if check_role == "Dev":
+                            if to_status in dev_start and not start_date:
+                                start_date = history["created"][:10]
+                            if to_status in dev_end and start_date:
+                                completed_date = history["created"][:10]
+                        elif check_role == "Regression":
+                            # For regression: first transition away from open/to do = start
+                            if not start_date and from_status in ("open", "to do", "backlog"):
+                                start_date = history["created"][:10]
+                            elif not start_date and to_status in regression_start:
+                                start_date = history["created"][:10]
+                            if to_status in regression_end and start_date:
+                                completed_date = history["created"][:10]
+                            # Handle direct Open → Closed (same transition)
+                            if not start_date and to_status in regression_end:
+                                start_date = history["created"][:10]
+                                completed_date = history["created"][:10]
+                        else:  # QA / DA
+                            if to_status in qa_start and not start_date:
+                                start_date = history["created"][:10]
+                            if to_status in qa_end and start_date:
+                                completed_date = history["created"][:10]
+        except Exception:
+            pass
+        return start_date, completed_date
+
+    # Process tickets - filter out QA Time subtasks for QA role, use parent instead
+    tickets = []
+    total_cycle = 0
+    tickets_with_cycle = 0
+    total_sp = 0
+    completed_tickets = 0
+    seen_parents = set()
+
+    for issue in issues:
+        fields = issue.get("fields", {})
+        key = issue.get("key", "")
+        summary = fields.get("summary", "")
+        status = fields.get("status", {}).get("name", "")
+        issue_type = fields.get("issuetype", {}).get("name", "")
+        sp = fields.get("customfield_10004") or 0
+        parent = fields.get("parent")
+
+        # For QA: detect QA subtasks (QA Time, QA - xxx, CLONE - QA Time) and use parent ticket instead
+        summary_lower = summary.lower().strip()
+        # Strip "clone - " prefix if present
+        clean_summary = summary_lower.replace("clone - ", "").replace("clone -", "").strip()
+        is_qa_subtask = (role == "QA" and parent and
+                         (clean_summary.startswith("qa time") or
+                          clean_summary.startswith("qa -") or
+                          clean_summary.startswith("qa-") or
+                          issue_type.lower() in ("technical task", "sub-task", "subtask")))
+        if is_qa_subtask:
+            parent_key = parent.get("key", "")
+            if parent_key in seen_parents:
+                continue
+            seen_parents.add(parent_key)
+
+            # Use parent ticket info
+            parent_summary = parent.get("fields", {}).get("summary", summary.replace("QA Time", "").strip()) if parent.get("fields") else parent_key
+            parent_status = parent.get("fields", {}).get("status", {}).get("name", status) if parent.get("fields") else status
+            parent_type = parent.get("fields", {}).get("issuetype", {}).get("name", "Story") if parent.get("fields") else "Story"
+
+            # Get QA SP from parent ticket (description/comments "QA: X" or SP field)
+            parent_sp_field = parent.get("fields", {}).get("customfield_10016") or parent.get("fields", {}).get("customfield_10004") if parent.get("fields") else None
+            if parent_sp_field:
+                qa_sp = float(parent_sp_field)
+            else:
+                _, qa_sp = _lookup_sp((parent_key, "QA"))
+                qa_sp = qa_sp or 0
+
+            # Determine if this is a Regression ticket
+            parent_summary_text = parent_summary if isinstance(parent_summary, str) else ""
+            is_regression = "regression" in parent_summary_text.lower()
+
+            # Cycle days:
+            # - Regression: from QA Time subtask's own transitions (In Progress → Closed)
+            # - Regular QA: from parent ticket's transitions (In Test → UAT/Done)
+            if is_regression:
+                start_date, completed_date = get_cycle_dates(key, "Regression")
+            else:
+                start_date, completed_date = get_cycle_dates(parent_key, role)
+
+            cycle_days = ""
+            if start_date and completed_date:
+                try:
+                    d1 = _dt.strptime(start_date, "%Y-%m-%d")
+                    d2 = _dt.strptime(completed_date, "%Y-%m-%d")
+                    cycle_days = count_weekdays(d1, d2)
+                    total_cycle += cycle_days
+                    tickets_with_cycle += 1
+                except Exception:
+                    pass
+
+            total_sp += (qa_sp or 0)
+            is_done = parent_status.lower() in ("done", "closed", "ready for release", "uat")
+            if is_done:
+                completed_tickets += 1
+
+            tickets.append({
+                "key": parent_key,
+                "summary": parent_summary if isinstance(parent_summary, str) else parent_key,
+                "type": parent_type if isinstance(parent_type, str) else "Story",
+                "status": parent_status if isinstance(parent_status, str) else status,
+                "sp": qa_sp or 0,
+                "startDate": start_date,
+                "completedDate": completed_date,
+                "cycleDays": cycle_days
+            })
+        else:
+            # Dev or non-QA-Time tickets: use directly
+            clean_sum = summary.lower().replace("clone - ", "").replace("clone -", "").strip()
+            is_qa_sub = (clean_sum.startswith("qa time") or clean_sum.startswith("qa -") or clean_sum.startswith("qa-") or issue_type.lower() in ("technical task", "sub-task", "subtask"))
+            if role == "QA" and is_qa_sub:
+                continue  # Skip QA subtask without parent
+
+            # For Dev: apply role-specific SP calculation
+            display_sp = sp
+            if role == "Dev" and display_name:
+                dn = display_name.lower()
+                if any(name in dn or dn in name for name in SP_FROM_FIELD_DEVS):
+                    display_sp = _dev_sp_from_field(sp) or 0
+                else:
+                    # Other devs: get Dev SP from description/comments
+                    _, looked_sp = _lookup_sp((key, "Dev"))
+                    if looked_sp:
+                        display_sp = looked_sp
+
+            start_date, completed_date = get_cycle_dates(key, role)
+            cycle_days = ""
+            if start_date and completed_date:
+                try:
+                    d1 = _dt.strptime(start_date, "%Y-%m-%d")
+                    d2 = _dt.strptime(completed_date, "%Y-%m-%d")
+                    cycle_days = count_weekdays(d1, d2)
+                    total_cycle += cycle_days
+                    tickets_with_cycle += 1
+                except Exception:
+                    pass
+
+            total_sp += (display_sp or 0)
+            is_done = status.lower() in ("done", "closed", "ready for release", "uat")
+            if is_done:
+                completed_tickets += 1
+
+            tickets.append({
+                "key": key,
+                "summary": summary,
+                "type": issue_type,
+                "status": status,
+                "sp": display_sp or 0,
+                "startDate": start_date,
+                "completedDate": completed_date,
+                "cycleDays": cycle_days
+            })
+
+    # Sort: tickets with cycle days first (ascending), then no-cycle
+    tickets.sort(key=lambda t: (0 if t["cycleDays"] else 1, t["cycleDays"] or 999))
+
+    cycle_days_list = [t["cycleDays"] for t in tickets if t["cycleDays"]]
+    avg_cycle = round(total_cycle / tickets_with_cycle, 1) if tickets_with_cycle > 0 else ""
+    fastest = min(cycle_days_list) if cycle_days_list else ""
+    slowest = max(cycle_days_list) if cycle_days_list else ""
+
+    return jsonify({
+        "member": display_name,
+        "role": role,
+        "sprint": sprint_name or "Current Sprint",
+        "totalTickets": len(tickets),
+        "completedTickets": completed_tickets,
+        "totalSP": total_sp,
+        "avgCycleDays": avg_cycle,
+        "fastest": fastest,
+        "slowest": slowest,
+        "tickets": tickets
+    })
 
 
 if __name__ == "__main__":
