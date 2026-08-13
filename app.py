@@ -159,6 +159,24 @@ def _dev_sp_from_field(sp):
     return float(math.floor(result))
 
 
+def _qa_sp_from_field(sp):
+    """Calculate QA SP as 40% of story points, rounded (same logic as dev but 40%)."""
+    if sp is None or sp == 0:
+        return None
+    sp = float(sp)
+    if sp <= 1:
+        return 1.0
+    if sp == 2:
+        return 1.0
+    if sp == 3:
+        return 1.0
+    import math
+    result = sp * 0.4
+    if result - math.floor(result) >= 0.5:
+        return float(math.ceil(result))
+    return float(math.floor(result))
+
+
 def _estimate_to_days(seconds):
     """Convert original estimate (seconds) to days, rounded up. 1d = 8h."""
     if not seconds:
@@ -167,10 +185,77 @@ def _estimate_to_days(seconds):
     return float(math.ceil(seconds / (8 * 3600)))
 
 
-def resolve_role_sp(tickets, role, display_name=None):
+def resolve_role_sp(tickets, role, display_name=None, team=None):
     """Batch resolve Dev or QA SP with parallel API calls."""
     role_label = role or "QA"
     is_dev = role_label == "Dev"
+
+    # OTECH and ERvive: use parent ticket SP with 60% Dev / 40% QA split
+    if team in ("OTECH", "ERvive"):
+        # Collect parent keys that need SP lookup
+        parent_keys = set()
+        for t in tickets:
+            p = t["parent"]
+            if p and p.get("key"):
+                parent_keys.add(p["key"])
+
+        # Fetch parent SPs via API
+        parent_sp_map = {}
+        parent_status_map = {}
+        if parent_keys:
+            keys_jql = ",".join(f'"{k}"' for k in parent_keys)
+            try:
+                parent_issues = jira_search(f'key in ({keys_jql})', max_results=50)
+                for pi in parent_issues:
+                    pk = pi["key"]
+                    pf = pi["fields"]
+                    sp_val = pf.get("customfield_10016") or pf.get("customfield_10004")
+                    if sp_val:
+                        parent_sp_map[pk] = float(sp_val)
+                    parent_status_map[pk] = (pf.get("status") or {}).get("name", "")
+            except Exception:
+                pass
+
+        for t in tickets:
+            parent_sp = None
+            p = t["parent"]
+            pk = p["key"] if p else None
+
+            # Try parent SP from lookup, then ticket's own SP
+            if pk and pk in parent_sp_map:
+                parent_sp = parent_sp_map[pk]
+            elif t["storyPoints"]:
+                parent_sp = float(t["storyPoints"])
+
+            if parent_sp:
+                if is_dev:
+                    t["roleSP"] = _dev_sp_from_field(parent_sp)
+                else:
+                    t["roleSP"] = _qa_sp_from_field(parent_sp)
+                if p:
+                    p["storyPoints"] = parent_sp
+            else:
+                t["roleSP"] = None
+
+            # Exclude from total AND hide SP for:
+            # - QA subtask is Rejected
+            # - Parent is Rejected
+            # - Regression tickets (parent summary contains "regression")
+            ticket_status = t.get("status", "").lower()
+            parent_status = (parent_status_map.get(pk, "") if pk else "").lower()
+            parent_summary = (p.get("summary", "") if p else "").lower()
+
+            if (ticket_status == "rejected"
+                    or parent_status == "rejected"
+                    or "regression" in parent_summary):
+                t["_excludeFromTotal"] = True
+                t["roleSP"] = None
+            else:
+                t["_excludeFromTotal"] = False
+
+            if p:
+                p.pop("_spField", None)
+        return
 
     if is_dev:
         dn = (display_name or "").lower()
@@ -821,7 +906,7 @@ def query():
                     if t["parent"]:
                         t["parent"]["_spField"] = None
 
-    resolve_role_sp(tickets, role, display_name)
+    resolve_role_sp(tickets, role, display_name, team=project)
     resolve_bugs(tickets, account_id, role, quarter=quarter)
     resolve_epics(tickets)
 
@@ -976,7 +1061,7 @@ def _sprint_summary(account_id, display_name, sprint_name, role):
         "sprint": sprint_name,
         "totalTickets": len(tickets),
         "totalSP": sum(t["storyPoints"] or 0 for t in tickets),
-        "totalRoleSP": sum(t["roleSP"] for t in tickets if t["roleSP"]),
+        "totalRoleSP": sum(t["roleSP"] for t in tickets if t["roleSP"] and not t.get("_excludeFromTotal")),
         "totalBugs": len(seen_bugs),
         "byStatus": {s: len(ts) for s, ts in by_status.items()},
         "tickets": tickets,
@@ -1104,7 +1189,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
                     t["storyPoints"] = None
                     if t["parent"]:
                         t["parent"]["_spField"] = None
-    resolve_role_sp(tickets, role, display_name)
+    resolve_role_sp(tickets, role, display_name, team=project_name)
     resolve_bugs(tickets, account_id, role, quarter=quarter)
     resolve_epics(tickets)
     if role == "Dev":
@@ -1161,7 +1246,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
         "role": role,
         "isDistchAutomation": is_distch,
         "totalTickets": len(tickets),
-        "totalRoleSP": sum(t["roleSP"] for t in tickets if t["roleSP"]),
+        "totalRoleSP": sum(t["roleSP"] for t in tickets if t["roleSP"] and not t.get("_excludeFromTotal")),
         "totalBugs": len(seen_bugs),
         "byStatus": {s: len(ts) for s, ts in by_status.items()},
         "tickets": tickets,
