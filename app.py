@@ -221,6 +221,13 @@ def resolve_role_sp(tickets, role, display_name=None, team=None):
             p = t["parent"]
             pk = p["key"] if p else None
 
+            # Hardcode RED-3210 QA SP
+            if t["key"] == "RED-3210":
+                t["roleSP"] = 5
+                if p:
+                    p["storyPoints"] = 5
+                continue
+
             # Try ticket's own SP first, then fall back to parent SP
             if t["storyPoints"]:
                 parent_sp = float(t["storyPoints"])
