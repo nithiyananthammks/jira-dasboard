@@ -895,13 +895,16 @@ def query():
         parent_keys = set(t["key"] for t in tickets if not t["type"].lower().startswith("sub"))
         if parent_keys:
             # Filter out QA Time subtasks whose parent is already in the list
+            qa_time_parent_keys = set(t["parent"]["key"] for t in tickets
+                                      if "qa time" in t["summary"].lower()
+                                      and t["parent"] and t["parent"]["key"] in parent_keys)
             tickets = [t for t in tickets
                        if not ("qa time" in t["summary"].lower()
                                and t["parent"] and t["parent"]["key"] in parent_keys)]
         if parent_keys:
-            # For parent tickets, clear SP field so it falls through to desc/comment extraction
+            # For parent tickets that have a QA Time subtask, clear SP field so it falls through
             for t in tickets:
-                if t["key"] in parent_keys:
+                if t["key"] in qa_time_parent_keys:
                     t["storyPoints"] = None
                     if t["parent"]:
                         t["parent"]["_spField"] = None
