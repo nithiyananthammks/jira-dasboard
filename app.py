@@ -221,11 +221,11 @@ def resolve_role_sp(tickets, role, display_name=None, team=None):
             p = t["parent"]
             pk = p["key"] if p else None
 
-            # Try parent SP from lookup, then ticket's own SP
-            if pk and pk in parent_sp_map:
-                parent_sp = parent_sp_map[pk]
-            elif t["storyPoints"]:
+            # Try ticket's own SP first, then fall back to parent SP
+            if t["storyPoints"]:
                 parent_sp = float(t["storyPoints"])
+            elif pk and pk in parent_sp_map:
+                parent_sp = parent_sp_map[pk]
 
             if parent_sp:
                 if is_dev:
