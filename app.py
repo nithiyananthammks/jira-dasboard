@@ -72,9 +72,26 @@ def jira_search(jql, max_results=100):
     return all_issues
 
 
+def _sp_scalar(val):
+    """Normalize a story-point field to a numeric scalar.
+
+    Some projects (e.g. RED/ERvive) return story points as an object like
+    {"value": 3.0} rather than a plain number. Return the numeric value, or
+    None if not present/parseable.
+    """
+    if val is None:
+        return None
+    if isinstance(val, dict):
+        val = val.get("value")
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def extract_ticket(issue):
     f = issue["fields"]
-    sp = f.get("customfield_10016") or f.get("customfield_10004")
+    sp = _sp_scalar(f.get("customfield_10016")) or _sp_scalar(f.get("customfield_10004"))
     sprint_field = f.get("customfield_10006")
     sprint_info = None
     if sprint_field:
@@ -98,7 +115,7 @@ def extract_ticket(issue):
             "status": pf.get("status", {}).get("name", "") if pf.get("status") else "",
             "type": pf.get("issuetype", {}).get("name", "") if pf.get("issuetype") else "",
             "storyPoints": None,
-            "_spField": pf.get("customfield_10016") or pf.get("customfield_10004"),
+            "_spField": _sp_scalar(pf.get("customfield_10016")) or _sp_scalar(pf.get("customfield_10004")),
         }
     return {
         "key": issue["key"],
@@ -202,6 +219,7 @@ def resolve_role_sp(tickets, role, display_name=None, team=None):
         # Fetch parent SPs via API
         parent_sp_map = {}
         parent_status_map = {}
+        parent_type_map = {}
         if parent_keys:
             keys_jql = ",".join(f'"{k}"' for k in parent_keys)
             try:
@@ -209,10 +227,11 @@ def resolve_role_sp(tickets, role, display_name=None, team=None):
                 for pi in parent_issues:
                     pk = pi["key"]
                     pf = pi["fields"]
-                    sp_val = pf.get("customfield_10016") or pf.get("customfield_10004")
+                    sp_val = _sp_scalar(pf.get("customfield_10016")) or _sp_scalar(pf.get("customfield_10004"))
                     if sp_val:
-                        parent_sp_map[pk] = float(sp_val)
+                        parent_sp_map[pk] = sp_val
                     parent_status_map[pk] = (pf.get("status") or {}).get("name", "")
+                    parent_type_map[pk] = (pf.get("issuetype") or {}).get("name", "")
             except Exception:
                 pass
 
@@ -228,21 +247,29 @@ def resolve_role_sp(tickets, role, display_name=None, team=None):
                     p["storyPoints"] = 5
                 continue
 
-            # Try ticket's own SP first, then fall back to parent SP
-            if t["storyPoints"]:
-                parent_sp = float(t["storyPoints"])
-            elif pk and pk in parent_sp_map:
-                parent_sp = parent_sp_map[pk]
-
-            if parent_sp:
-                if is_dev:
-                    t["roleSP"] = _dev_sp_from_field(parent_sp)
-                else:
-                    t["roleSP"] = _qa_sp_from_field(parent_sp)
+            # Prefer the ticket's OWN story points. Rule:
+            #  - If the ticket has its OWN story points -> use them directly
+            #    (no 60/40 split; the SP is already the person's estimate).
+            #  - Else fall back to the parent's SP and apply the 60/40 split,
+            #    but NEVER when the parent is an Epic (an Epic aggregates the
+            #    whole feature, e.g. 35 SP, which overstates one task —
+            #    RED-3113 bug: showed 14 = 35*0.4 instead of its own 3 SP).
+            own_sp = _sp_scalar(t["storyPoints"])
+            if own_sp:
+                # Own SP: use as-is for both Dev and QA.
+                t["roleSP"] = own_sp
                 if p:
-                    p["storyPoints"] = parent_sp
+                    p["storyPoints"] = own_sp
             else:
-                t["roleSP"] = None
+                parent_sp = None
+                if pk and pk in parent_sp_map and parent_type_map.get(pk, "").lower() != "epic":
+                    parent_sp = parent_sp_map[pk]
+                if parent_sp:
+                    t["roleSP"] = _dev_sp_from_field(parent_sp) if is_dev else _qa_sp_from_field(parent_sp)
+                    if p:
+                        p["storyPoints"] = parent_sp
+                else:
+                    t["roleSP"] = None
 
             # Exclude from total AND hide SP for:
             # - QA subtask is Rejected
