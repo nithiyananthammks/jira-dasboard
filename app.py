@@ -882,7 +882,12 @@ def query():
         if is_distch:
             jql += f' AND created >= "{year}-{start}" AND created <= "{year}-{end}"'
         else:
-            jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
+            # Delivery-based quarter scope: tickets RESOLVED in the quarter, plus
+            # still-open tickets updated in the quarter (so in-progress work stays
+            # visible). Using resolutiondate avoids counting old tickets that were
+            # merely re-touched (bulk edits) during the quarter.
+            jql += (f' AND ((resolutiondate >= "{year}-{start}" AND resolutiondate <= "{year}-{end}")'
+                    f' OR (resolution = Unresolved AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"))')
     else:
         jql += ' AND updated >= startOfYear()'
     jql += ' ' + USER_JQL_EXCLUDE.get(display_name.lower(), '')
@@ -1174,7 +1179,10 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
                          "Q3": ("07-01", "09-30"), "Q4": ("10-01", "12-31")}
         if quarter in QUARTER_DATES:
             start, end = QUARTER_DATES[quarter]
-            jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
+            # Delivery-based quarter scope (resolved in quarter, or still-open and
+            # updated in quarter) — avoids counting stale tickets merely re-touched.
+            jql += (f' AND ((resolutiondate >= "{year}-{start}" AND resolutiondate <= "{year}-{end}")'
+                    f' OR (resolution = Unresolved AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"))')
     elif project_name == "DISTCH Automation":
         year = __import__("datetime").date.today().year
         jql += f' AND created >= "{year}-01-01"'
