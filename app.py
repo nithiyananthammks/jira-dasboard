@@ -1033,19 +1033,31 @@ def query():
         else:
             no_sprint.append(t)
 
+    # When filtering by quarter, exclude backlog tickets from metrics
+    # Backlog is still returned for display but marked as excluded from totals
+    tickets_for_metrics = tickets
+    if quarter:
+        # Mark backlog tickets to exclude from totals
+        no_sprint_keys = set(t["key"] for t in no_sprint)
+        for t in tickets:
+            if t["key"] in no_sprint_keys:
+                t["_excludeFromTotal"] = True
+        # Filter tickets for metric calculation (exclude backlog)
+        tickets_for_metrics = [t for t in tickets if t["key"] not in no_sprint_keys]
+
     # Parent status breakdown (deduplicate by parent key)
     parent_status_counts = {}
     seen_parents = set()
-    for t in tickets:
+    for t in tickets_for_metrics:
         if t["parent"] and t["parent"]["key"] not in seen_parents:
             seen_parents.add(t["parent"]["key"])
             ps = t["parent"]["status"] or "Unknown"
             parent_status_counts[ps] = parent_status_counts.get(ps, 0) + 1
 
-    total_role_sp = sum(t["roleSP"] for t in tickets if t["roleSP"])
-    # Count unique bugs across all tickets
+    total_role_sp = sum(t["roleSP"] for t in tickets_for_metrics if t["roleSP"])
+    # Count unique bugs across tickets (excluding backlog when quarter is specified)
     seen_bugs = set()
-    for t in tickets:
+    for t in tickets_for_metrics:
         for b in t.get("bugs", []):
             seen_bugs.add(b["key"])
     total_bugs = len(seen_bugs)
@@ -1086,7 +1098,7 @@ def query():
         "role": role,
         "isDistchAutomation": is_distch,
         "parsedQuery": {"name": name, "sprint": sprint, "quarter": quarter, "month": month},
-        "totalTickets": len(tickets),
+        "totalTickets": len(tickets_for_metrics),
         "totalStoryPoints": total_sp,
         "totalRoleSP": total_role_sp,
         "totalBugs": total_bugs,
@@ -1290,6 +1302,13 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
         if "qa automation" in t["summary"].lower():
             t["parent"] = None
             t["bugs"] = []
+    
+    # When filtering by quarter, mark tickets without sprints as excluded from totals
+    if quarter:
+        for t in tickets:
+            if not t.get("sprint"):
+                t["_excludeFromTotal"] = True
+    
     seen_bugs = set()
     for t in tickets:
         for b in t.get("bugs", []):
@@ -1334,7 +1353,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
         "name": display_name,
         "role": role,
         "isDistchAutomation": is_distch,
-        "totalTickets": len(tickets),
+        "totalTickets": len([t for t in tickets if not t.get("_excludeFromTotal")]),
         "totalRoleSP": sum(t["roleSP"] for t in tickets if t["roleSP"] and not t.get("_excludeFromTotal")),
         "totalBugs": len(seen_bugs),
         "byStatus": {s: len(ts) for s, ts in by_status.items()},
