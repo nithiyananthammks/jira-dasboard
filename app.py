@@ -46,7 +46,7 @@ PROJECT_TEAMS = {
     "DISTCH Automation": {"keys": ["QA"], "sprintPrefixes": [], "QA": ["Sathish Kumar", "Soorya"]},
     "DISTCH": {"keys": ["DISTCH"], "sprintPrefixes": ["DistCH Sprint"], "QA": ["Jamuna", "Suganya"]},
     "DISTCH DA": {"keys": ["DISTCH"], "sprintPrefixes": ["DistCH Sprint"], "Dev": ["Raghuvaran", "Manikanta"]},
-    "CS DA": {"keys": ["DSPROD"], "sprintPrefixes": ["DSPROD Sprint"], "Dev": ["Reddamma", "Nareen"]},
+    "CS DA": {"keys": ["DSPROD"], "sprintPrefixes": ["DSPROD Sprint"], "boardId": 5020, "boardType": "kanban", "Dev": ["Reddamma", "Nareen"]},
     "ERvive": {"keys": ["RED"], "sprintPrefixes": ["RED Sprint"], "QA": ["Arun"]},
 }
 
@@ -791,14 +791,55 @@ def sprints():
     name = request.args.get("name", "").strip()
     project = request.args.get("project", "").strip()
 
-    # Collect account IDs to search
+    # If project has a boardId, use the board API directly
+    if project and project in PROJECT_TEAMS:
+        team = PROJECT_TEAMS[project]
+        board_id = team.get("boardId")
+        if board_id:
+            try:
+                # Fetch all sprints from the board
+                all_sprints = []
+                start_at = 0
+                max_results = 50
+                current_year = str(__import__("datetime").date.today().year)
+                
+                while True:
+                    resp = SESSION.get(
+                        f"{JIRA_URL}/rest/agile/1.0/board/{board_id}/sprint",
+                        params={"startAt": start_at, "maxResults": max_results}
+                    )
+                    resp.raise_for_status()
+                    data = resp.json()
+                    values = data.get("values", [])
+                    
+                    for sprint in values:
+                        end = (sprint.get("endDate") or "")[:4]
+                        # Only include sprints from current year
+                        if end >= current_year:
+                            all_sprints.append({
+                                "name": sprint.get("name"),
+                                "state": sprint.get("state", "").lower()
+                            })
+                    
+                    if data.get("isLast", True):
+                        break
+                    start_at += max_results
+                
+                # Sort: active first, then by name
+                all_sprints.sort(key=lambda x: (x["state"] != "active", x["name"]), reverse=True)
+                return jsonify({"sprints": all_sprints})
+            except Exception as e:
+                print(f"Board API failed for board {board_id}: {e}, falling back to issue search")
+                # Fall through to original logic
+
+    # Original logic: search by assigned tickets
     account_ids = []
     proj_keys = []
     if project and project in PROJECT_TEAMS:
         team = PROJECT_TEAMS[project]
         proj_keys = team.get("keys", [])
         for role_key, role_members in team.items():
-            if role_key == "keys" or not isinstance(role_members, list):
+            if role_key in ("keys", "boardId", "sprintPrefixes") or not isinstance(role_members, list):
                 continue
             for member in role_members:
                 try:
@@ -820,7 +861,7 @@ def sprints():
         # Find project keys for this member
         for pname, team in PROJECT_TEAMS.items():
             for role_key, role_members in team.items():
-                if role_key == "keys" or not isinstance(role_members, list):
+                if role_key in ("keys", "boardId", "sprintPrefixes") or not isinstance(role_members, list):
                     continue
                 if any(m.lower() in name.lower() or name.lower() in m.lower() for m in role_members):
                     proj_keys.extend(team.get("keys", []))
@@ -1213,6 +1254,9 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
     elif project_name == "DISTCH Automation":
         year = __import__("datetime").date.today().year
         jql += f' AND created >= "{year}-01-01"'
+    elif project_name == "CS DA":
+        # Kanban board - show recent work (last 90 days)
+        jql += ' AND updated >= -90d'
     else:
         jql += ' AND sprint in openSprints()'
     jql += ' ' + USER_JQL_EXCLUDE.get(display_name.lower(), '')
