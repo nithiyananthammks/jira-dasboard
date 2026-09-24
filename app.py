@@ -943,19 +943,21 @@ def query():
         year = __import__("datetime").date.today().year
         m = int(month)
         last_day = calendar.monthrange(year, m)[1]
-        jql += f' AND updated >= "{year}-{m:02d}-01" AND updated <= "{year}-{m:02d}-{last_day}"'
+        # Use resolutiondate for completed tickets to avoid counting old tickets
+        # that were merely updated (e.g., comment added) in the month
+        jql += (f' AND ((resolutiondate >= "{year}-{m:02d}-01" AND resolutiondate <= "{year}-{m:02d}-{last_day}")'
+                f' OR (resolution = Unresolved AND updated >= "{year}-{m:02d}-01" AND updated <= "{year}-{m:02d}-{last_day}"))')
     elif quarter and quarter in QUARTER_DATES:
         year = __import__("datetime").date.today().year
         start, end = QUARTER_DATES[quarter]
-        if is_distch:
-            jql += f' AND created >= "{year}-{start}" AND created <= "{year}-{end}"'
-        else:
-            # Delivery-based quarter scope: tickets RESOLVED in the quarter, plus
-            # still-open tickets updated in the quarter (so in-progress work stays
-            # visible). Using resolutiondate avoids counting old tickets that were
-            # merely re-touched (bulk edits) during the quarter.
-            jql += (f' AND ((resolutiondate >= "{year}-{start}" AND resolutiondate <= "{year}-{end}")'
-                    f' OR (resolution = Unresolved AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"))')
+        # Delivery-based quarter scope: tickets RESOLVED in the quarter, plus
+        # still-open tickets updated in the quarter (so in-progress work stays
+        # visible). Using resolutiondate avoids counting old tickets that were
+        # merely re-touched (bulk edits) during the quarter.
+        # This applies to ALL projects including DISTCH Automation to ensure
+        # test cases logged in comments are counted in the correct quarter.
+        jql += (f' AND ((resolutiondate >= "{year}-{start}" AND resolutiondate <= "{year}-{end}")'
+                f' OR (resolution = Unresolved AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"))')
     else:
         jql += ' AND updated >= startOfYear()'
     jql += ' ' + USER_JQL_EXCLUDE.get(display_name.lower(), '')
@@ -1396,7 +1398,10 @@ def project_view():
                         jql += f' AND sprint = "{sprint}"'
                     elif quarter and quarter in QUARTER_DATES:
                         start, end = QUARTER_DATES[quarter]
-                        jql += f' AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"'
+                        # Use resolutiondate for completed tickets to avoid counting
+                        # old tickets that were merely updated (e.g., comment added) in the quarter
+                        jql += (f' AND ((resolutiondate >= "{year}-{start}" AND resolutiondate <= "{year}-{end}")'
+                                f' OR (resolution = Unresolved AND updated >= "{year}-{start}" AND updated <= "{year}-{end}"))')
                     else:
                         jql += ' AND sprint in openSprints()'
                     jql += f' {USER_JQL_EXCLUDE.get(display_name.lower(), "")} ORDER BY updated DESC'
