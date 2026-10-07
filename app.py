@@ -496,7 +496,6 @@ def resolve_bugs(tickets, account_id, role=None, sprint_name=None, quarter=None)
         if t["parent"]:
             parent_keys.add(t["parent"]["key"])
     bugs_by_parent = {}
-    unlinked_bugs = []
     for b in bug_issues:
         bf = b["fields"]
         bug_status = (bf.get("status") or {}).get("name", "")
@@ -509,16 +508,15 @@ def resolve_bugs(tickets, account_id, role=None, sprint_name=None, quarter=None)
             "summary": bf.get("summary", ""),
             "status": (bf.get("status") or {}).get("name", ""),
         }
+        # Only attribute a bug to a displayed QA ticket when the bug's parent matches that
+        # ticket's parent (i.e. it was raised against the story this QA ticket tested). Bugs
+        # with a non-matching parent belong to other stories the member merely reported and are
+        # deliberately excluded here (previously they were force-attached to the first ticket).
         if pk and pk in parent_keys:
             bugs_by_parent.setdefault(pk, []).append(bug_entry)
-        else:
-            unlinked_bugs.append(bug_entry)
     for t in tickets:
         if t["parent"] and t["parent"]["key"] in bugs_by_parent:
             t["bugs"] = bugs_by_parent[t["parent"]["key"]]
-    # Attach unlinked bugs to the first ticket so they get counted
-    if unlinked_bugs and tickets:
-        tickets[0].setdefault("bugs", []).extend(unlinked_bugs)
 
 
 def resolve_epics(tickets):
