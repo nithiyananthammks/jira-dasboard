@@ -89,6 +89,24 @@ def _sp_scalar(val):
         return None
 
 
+_QA_AUTOMATION_SUMMARY = re.compile(
+    r"\bqa(?:\s*[-–—]\s*|\s+)automation\b", re.IGNORECASE)
+
+
+def is_qa_automation_ticket(ticket):
+    """Return True for QA Automation tickets, with or without a dash."""
+    return bool(_QA_AUTOMATION_SUMMARY.search(ticket.get("summary", "")))
+
+
+def suppress_qa_automation_metrics(tickets):
+    """Hide manual-QA metrics that do not apply to automation tickets."""
+    for ticket in tickets:
+        if is_qa_automation_ticket(ticket):
+            ticket["parent"] = None
+            ticket["bugs"] = []
+            ticket["roleSP"] = None
+
+
 def extract_ticket(issue):
     f = issue["fields"]
     sp = _sp_scalar(f.get("customfield_10016")) or _sp_scalar(f.get("customfield_10004"))
@@ -206,6 +224,16 @@ def resolve_role_sp(tickets, role, display_name=None, team=None):
     """Batch resolve Dev or QA SP with parallel API calls."""
     role_label = role or "QA"
     is_dev = role_label == "Dev"
+
+    # QA Automation work is tracked by test-case/regression metrics, not SP.
+    # Filter it before any field, description, comment, or parent SP lookup.
+    for ticket in tickets:
+        if is_qa_automation_ticket(ticket):
+            ticket["roleSP"] = None
+    tickets = [ticket for ticket in tickets
+               if not is_qa_automation_ticket(ticket)]
+    if not tickets:
+        return
 
     # OTECH and ERvive: use parent ticket SP with 60% Dev / 40% QA split
     if team in ("OTECH", "ERvive"):
@@ -1000,11 +1028,8 @@ def query():
                    if t["type"].lower() not in ("bug-subtask", "bug")
                    or not (t["parent"] and t["parent"]["key"] in assigned_keys)]
 
-    # QA Automation tickets: hide parent and bugs
-    for t in tickets:
-        if "qa automation" in t["summary"].lower():
-            t["parent"] = None
-            t["bugs"] = []
+    # QA Automation tickets: hide parent, bugs, and QA SP
+    suppress_qa_automation_metrics(tickets)
 
     total_sp = sum(t["storyPoints"] or 0 for t in tickets)
 
@@ -1141,10 +1166,7 @@ def _sprint_summary(account_id, display_name, sprint_name, role):
         tickets = [t for t in tickets
                    if t["type"].lower() not in ("bug-subtask", "bug")
                    or not (t["parent"] and t["parent"]["key"] in assigned_keys)]
-    for t in tickets:
-        if "qa automation" in t["summary"].lower():
-            t["parent"] = None
-            t["bugs"] = []
+    suppress_qa_automation_metrics(tickets)
     by_status = {}
     for t in tickets:
         by_status.setdefault(t["status"], []).append(t)
@@ -1298,10 +1320,7 @@ def _member_summary(name, sprint=None, project_keys=None, project_name=None, qua
         tickets = [t for t in tickets
                    if t["type"].lower() not in ("bug-subtask", "bug")
                    or not (t["parent"] and t["parent"]["key"] in assigned_keys)]
-    for t in tickets:
-        if "qa automation" in t["summary"].lower():
-            t["parent"] = None
-            t["bugs"] = []
+    suppress_qa_automation_metrics(tickets)
     
     # When filtering by quarter, mark tickets without sprints as excluded from totals
     if quarter:
