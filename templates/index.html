@@ -149,6 +149,7 @@ a:hover{text-decoration:underline}
     </select>
     <button id="compareBtn" class="compare-btn" onclick="toggleCompare()" disabled>⚖️</button>
     <button class="compare-btn" onclick="loadAutomation()">🤖 Automation</button>
+    <button class="compare-btn" onclick="showAutomationQuarter()">📅 Automation Quarter Wise</button>
     <button class="compare-btn" onclick="showDefectsTracker()">🐛 Defects Tracker</button>
     <button class="compare-btn" onclick="showCycleTime()">⏱ Cycle Time</button>
   </div>
@@ -890,6 +891,47 @@ async function loadAutomation() {
     content.innerHTML = html;
   } catch (e) {
     content.innerHTML = `<div class="error">Failed to load automation data: ${e.message}</div>`;
+  }
+}
+
+function showAutomationQuarter() {
+  const bar = document.getElementById("parsedBar");
+  bar.innerHTML = "📅 <span>Automation Quarter Wise</span>";
+  bar.style.display = "block";
+  document.getElementById("projectSelect").value = "";
+  currentProject = null;
+
+  let html = '<div class="section"><h2>📅 Automation Quarter Wise</h2>';
+  html += '<div style="display:flex;gap:12px;margin-bottom:20px;align-items:center">';
+  html += '<select id="autoQuarter" class="team-dropdown" onchange="fetchAutomationQuarter()">'
+        + '<option value="" selected disabled>📅 Select Quarter</option>'
+        + '<option value="Q1">Q1 (Jan-Mar)</option><option value="Q2">Q2 (Apr-Jun)</option>'
+        + '<option value="Q3">Q3 (Jul-Sep)</option><option value="Q4">Q4 (Oct-Dec)</option></select>';
+  html += '</div><div id="autoQuarterResult"></div></div>';
+  document.getElementById("content").innerHTML = html;
+}
+
+async function fetchAutomationQuarter() {
+  const quarter = document.getElementById("autoQuarter").value;
+  const result = document.getElementById("autoQuarterResult");
+  if (!quarter) return;
+  result.innerHTML = '<div class="loading">⏳ Loading...</div>';
+  try {
+    const resp = await fetch(`/api/automation-quarter?quarter=${encodeURIComponent(quarter)}`);
+    const data = await resp.json();
+    if (data.error) { result.innerHTML = `<div class="error">${data.error}</div>`; return; }
+    let html = '<div class="tbl-wrap"><table><thead><tr><th>Project Name</th>'
+             + '<th style="text-align:center">Regression Fixes</th>'
+             + '<th style="text-align:center">New Test Cases</th></tr></thead><tbody>';
+    data.rows.forEach(r => {
+      html += `<tr><td><strong>${r.project}</strong></td>`
+            + `<td style="text-align:center">${r.regressionFixes}</td>`
+            + `<td style="text-align:center">${r.newTestCases}</td></tr>`;
+    });
+    html += '</tbody></table></div>';
+    result.innerHTML = html;
+  } catch (e) {
+    result.innerHTML = `<div class="error">Failed: ${e.message}</div>`;
   }
 }
 

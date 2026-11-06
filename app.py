@@ -1546,6 +1546,48 @@ def automation_view():
     return jsonify(results)
 
 
+AUTOMATION_QUARTER_PROJECTS = ["Controlled Substance", "Openbeds", "DISTCH", "ERvive / OTECH", "CareCo"]
+
+# Hardcoded from "QA Regression-Tracker-Bamboo.xlsx" (sheets 2-5, table
+# "Testcases Automated - Regression Fixes & New Test cases"), totalled per project.
+# Format: quarter -> project -> (regression_fixes, new_test_cases)
+# Sheet names -> dashboard names: PURPLE=Controlled Substance, OPEN BEDS=Openbeds,
+# CARECO=CareCo, "ERVIVE, OTECH"=ERvive / OTECH. Blank or "-" cells in the sheet count as 0.
+AUTOMATION_QUARTER_DATA = {
+    "Q1": {"Controlled Substance": (14, 16), "Openbeds": (1, 0), "DISTCH": (0, 0),
+           "ERvive / OTECH": (0, 0), "CareCo": (0, 5)},
+    "Q2": {"Controlled Substance": (50, 65), "Openbeds": (90, 33), "DISTCH": (0, 0),
+           "ERvive / OTECH": (0, 0), "CareCo": (0, 7)},
+    "Q3": {"Controlled Substance": (60, 33), "Openbeds": (45, 6), "DISTCH": (80, 0),
+           "ERvive / OTECH": (0, 0), "CareCo": (0, 5)},
+    "Q4": {"Controlled Substance": (90, 23), "Openbeds": (6, 9), "DISTCH": (0, 0),
+           "ERvive / OTECH": (0, 0), "CareCo": (0, 2)},
+}
+
+
+def automation_quarter_counts(project, quarter):
+    """Return (regression_fixes, new_test_cases) for one project in a quarter.
+
+    Currently reads the hardcoded AUTOMATION_QUARTER_DATA. Swap this body for real
+    count logic later; the route does not need to change.
+    """
+    return AUTOMATION_QUARTER_DATA.get(quarter, {}).get(project, (0, 0))
+
+
+@app.route("/api/automation-quarter")
+def automation_quarter_view():
+    quarter = request.args.get("quarter", "").strip().upper()
+    if quarter not in ("Q1", "Q2", "Q3", "Q4"):
+        return jsonify({"error": "Invalid quarter. Use Q1, Q2, Q3 or Q4."}), 400
+    rows = []
+    for project in AUTOMATION_QUARTER_PROJECTS:
+        regression_fixes, new_test_cases = automation_quarter_counts(project, quarter)
+        rows.append({"project": project,
+                     "regressionFixes": regression_fixes,
+                     "newTestCases": new_test_cases})
+    return jsonify({"quarter": quarter, "rows": rows})
+
+
 @app.route("/api/defects")
 def defects_view():
     team = request.args.get("team", "").strip()
